@@ -183,6 +183,10 @@ struct AutomapTarget {
     int32_t             centerX;
     int32_t             centerY;
     BottomMapBounds     bounds;     // How much of the map fits in the room it has been given
+    int32_t             minScreenX; // The columns and rows that room actually covers, which the map is clamped to
+    int32_t             maxScreenX;
+    int32_t             minScreenY;
+    int32_t             maxScreenY;
 };
 
 static NativeFramebuffer16 getFramebuffer(const gfxScreen_t screen, const gfx3dSide_t side = GFX_LEFT) noexcept {
@@ -927,10 +931,24 @@ void VideoBackend_SDL::presentNativeFramebuffers() noexcept {
         mapTarget.framebuffer = bottomFramebuffer;
         mapTarget.centerX = bottomFramebuffer.width / 2;
         mapTarget.centerY = automapY + automapH / 2;
-        mapTarget.bounds.maxX = ((bottomFramebuffer.width / 2) - 1) * BOTTOM_MAP_SCALE_DEN / BOTTOM_MAP_SCALE_NUM;
-        mapTarget.bounds.minX = -mapTarget.bounds.maxX;
-        mapTarget.bounds.maxY = ((automapH / 2) - 1) * BOTTOM_MAP_SCALE_DEN / BOTTOM_MAP_SCALE_NUM;
-        mapTarget.bounds.minY = -mapTarget.bounds.maxY;
+        // The rows and columns the map is allowed to occupy, which the status bar has already been kept out of
+        mapTarget.minScreenX = 0;
+        mapTarget.maxScreenX = bottomFramebuffer.width - 1;
+        mapTarget.minScreenY = automapY;
+        mapTarget.maxScreenY = automapY + automapH - 1;
+
+        // Turn a distance in screen pixels into a map distance that scales back up to at least that far. Rounding the
+        // other way leaves the map short of the edge, and short by more than it looks: the scale skips some screen
+        // offsets entirely, so a bound that merely fits can be a further pixel in.
+        const auto screenToMapExtent = [](const int32_t screenExtent) noexcept {
+            return (screenExtent * BOTTOM_MAP_SCALE_DEN + BOTTOM_MAP_SCALE_NUM - 1) / BOTTOM_MAP_SCALE_NUM;
+        };
+
+        // Note the signs: map y counts upwards, so the larger bound is the one towards the top of the screen
+        mapTarget.bounds.maxX = screenToMapExtent(mapTarget.maxScreenX - mapTarget.centerX);
+        mapTarget.bounds.minX = -screenToMapExtent(mapTarget.centerX - mapTarget.minScreenX);
+        mapTarget.bounds.maxY = screenToMapExtent(mapTarget.centerY - mapTarget.minScreenY);
+        mapTarget.bounds.minY = -screenToMapExtent(mapTarget.maxScreenY - mapTarget.centerY);
 
         const auto drawNativeMapLine = [](
             void* const userData,
@@ -951,6 +969,13 @@ void VideoBackend_SDL::presentNativeFramebuffers() noexcept {
             x2 = target.centerX + (x2 * BOTTOM_MAP_SCALE_NUM) / BOTTOM_MAP_SCALE_DEN;
             y1 = target.centerY - (y1 * BOTTOM_MAP_SCALE_NUM) / BOTTOM_MAP_SCALE_DEN;
             y2 = target.centerY - (y2 * BOTTOM_MAP_SCALE_NUM) / BOTTOM_MAP_SCALE_DEN;
+
+            // The clip above works in map units and the bounds round outwards, so an endpoint can land a pixel past
+            // the edge. Bring it back rather than dropping the line, which is what left a black margin before.
+            x1 = std::clamp(x1, target.minScreenX, target.maxScreenX);
+            x2 = std::clamp(x2, target.minScreenX, target.maxScreenX);
+            y1 = std::clamp(y1, target.minScreenY, target.maxScreenY);
+            y2 = std::clamp(y2, target.minScreenY, target.maxScreenY);
 
             const int32_t deltaX = std::abs(x2 - x1);
             const int32_t stepX = (x1 < x2) ? 1 : -1;

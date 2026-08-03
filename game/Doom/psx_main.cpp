@@ -86,12 +86,6 @@ int psx_main(const int argc, const char* const* const argv) noexcept {
         PlayerPrefs::load();
         PSYDOOM_3DS_LOG("psx_main: player preferences loaded");
 
-        // Only now that there are real settings in memory is it safe to arrange for them to be written back: a HOME
-        // press before this point would have saved the defaults over whatever the player actually had.
-        #if PSYDOOM_3DS
-            Platform3DS::installHomeButtonSaveHook();
-        #endif
-
         // Initialize the emulated PSX components using the PSX Doom disc (supplied as a .cue file).
         // This must be provided in order for the game to run.
         const char* const cueFilePath = (ProgArgs::gCueFileOverride) ? ProgArgs::gCueFileOverride : Config::gCueFilePath.c_str();

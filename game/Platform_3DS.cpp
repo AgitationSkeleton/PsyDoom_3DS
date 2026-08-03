@@ -1,7 +1,5 @@
 #include "Platform_3DS.h"
 
-#include "PsyDoom/PlayerPrefs.h"
-
 #include <3ds.h>
 #include <minizip/unzip.h>
 
@@ -199,23 +197,6 @@ bool isNew3DS() noexcept {
     }
 
     return bIsNew3DS;
-}
-
-//--------------------------------------------------------------------------------------------------------------------------------------
-// Saving on the way to the HOME menu: see the header for why this is where it has to happen
-//--------------------------------------------------------------------------------------------------------------------------------------
-static aptHookCookie gAptHookCookie = {};
-
-static void onAptHook(const APT_HookType hookType, [[maybe_unused]] void* const pUser) noexcept {
-    // A suspend is HOME being pressed, and is the one that matters: the player may never come back from it. The exit
-    // case is here too for the tidier paths that do get one.
-    if ((hookType == APTHOOK_ONSUSPEND) || (hookType == APTHOOK_ONEXIT)) {
-        PlayerPrefs::flushToDisk();
-    }
-}
-
-void installHomeButtonSaveHook() noexcept {
-    aptHook(&gAptHookCookie, onAptHook, nullptr);
 }
 
 void idleWait() noexcept {

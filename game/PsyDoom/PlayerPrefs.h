@@ -79,6 +79,10 @@ extern Password             gLastPassword_GecMe;
     // Nothing on a 3DS exits the way a desktop program does: the player presses HOME and closes the app, and the
     // process is ended where it stands. The cleanup at the end of 'psx_main' never runs, so anything only written
     // there is never written at all - which is why settings changed in a menu did not survive a restart.
+    //
+    // So every menu that can change something calls this as it closes, and the settings are on the card from that
+    // moment on. Call it from the main thread only: it builds paths and writes files, which is more than an APT hook
+    // has the stack for, and an attempt to catch the HOME button that way crashed the console on close.
     void flushToDisk() noexcept;
 
     // Applies 'gStatusBarPos' to the renderer's view height

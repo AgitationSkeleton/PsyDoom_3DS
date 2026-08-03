@@ -23,10 +23,6 @@ bool isNew3DS() noexcept;
 //--------------------------------------------------------------------------------------------------------------------------------------
 void logOpen() noexcept;
 
-// Arranges for settings to be written out when the player presses HOME, which is how the game is usually left.
-// Call once at startup; safe to call before anything the callback touches has been used.
-void installHomeButtonSaveHook() noexcept;
-
 // Somewhere to idle while waiting for something, without touching either screen.
 //
 // Whatever is on the displays when a wait begins is a finished frame, and repainting them from the PlayStation
