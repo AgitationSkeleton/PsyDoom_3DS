@@ -217,7 +217,7 @@ bool recvBytes(void* pBuffer, const int32_t numBytes) noexcept {
         const int32_t received = NetworkUds3DS::receive(pBuffer, numBytes);
 
         if (received > 0)
-            return true;
+            return (received == numBytes);
 
         if (received < 0) {
             shutdown();
@@ -236,7 +236,16 @@ bool sendTickPacket(const NetPacket_Tick& packet) noexcept {
     if (!isConnected())
         return false;
 
-    return NetworkUds3DS::send(&packet, sizeof(packet));
+    // Note: waits for room rather than giving up. See the comment above 'sendBytes'.
+    while (!NetworkUds3DS::send(&packet, sizeof(packet))) {
+        if (!pumpWhileWaiting(false))
+            return false;
+
+        if (!isConnected())
+            return false;
+    }
+
+    return true;
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -259,6 +268,9 @@ bool recvTickPacket(NetPacket_Tick& packet, std::chrono::system_clock::time_poin
         const int32_t received = NetworkUds3DS::receive(&gPendingTickPacket, sizeof(gPendingTickPacket), &recvTimeMs);
 
         if (received > 0) {
+            if (received != (int32_t) sizeof(gPendingTickPacket))
+                return false;       // Not a tick packet: the two sides disagree about what is being exchanged
+
             // Convert the link's monotonic arrival time into the clock the engine measures lateness against
             const int64_t monotonicNowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                 std::chrono::steady_clock::now().time_since_epoch()
