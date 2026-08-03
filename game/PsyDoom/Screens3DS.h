@@ -38,7 +38,13 @@ enum class BottomScreen : uint8_t {
 
 // How many rows of the touch screen the status bar takes when it lives there.
 // The status bar is 256x40 in the framebuffer, and 320/256 scales that to 50 rows.
-static constexpr int32_t BOTTOM_STATUS_BAR_H = 50;
+// The part of the framebuffer the status bar actually draws on. The sprite is forty rows tall but the artwork stops
+// at row 232, and the blank remainder is not worth any of the touch screen.
+static constexpr int32_t BOTTOM_STATUS_BAR_SRC_Y = 200;
+static constexpr int32_t BOTTOM_STATUS_BAR_SRC_H = 33;
+
+// How much of the touch screen that comes to, at the same scale the width is blown up by (320 over 256)
+static constexpr int32_t BOTTOM_STATUS_BAR_H = (BOTTOM_STATUS_BAR_SRC_H * 320) / 256;
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // 'MenuTwoPass': a menu that composes each screen separately.

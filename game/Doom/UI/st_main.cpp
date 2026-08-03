@@ -694,6 +694,14 @@ void ST_DrawMessage() noexcept {
     if (gStatusBar.messageTicsLeft <= 0)
         return;
 
+    // The font is sprites from the STATUS texture page, so point the GPU at it: whatever drew last may not have
+    {
+        DR_MODE drawModePrim = {};
+        const SRECT texWindow = { (int16_t) gTex_STATUS.texPageCoordX, (int16_t) gTex_STATUS.texPageCoordY, 256, 256 };
+        LIBGPU_SetDrawMode(drawModePrim, false, false, gTex_STATUS.texPageId, &texWindow);
+        I_AddPrim(drawModePrim);
+    }
+
     // Sits just above the bottom of the 3D view, which is taller when the status bar has moved to the touch screen.
     // At the PlayStation's view height this is the 193 the message was always drawn at.
     const int32_t msgY = gViewHeight - 7;
