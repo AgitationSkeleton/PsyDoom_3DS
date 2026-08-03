@@ -29,6 +29,7 @@ CMakeSettings.json
 # makerom and bannertool, built or downloaded locally
 /tools/3ds/bin/
 /tools/3ds/.build/
+__pycache__/
 
 # ------------------------------------------------------------------------------------------------------------------
 # Anything carrying game data, wherever it turns up

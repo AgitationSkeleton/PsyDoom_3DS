@@ -238,12 +238,18 @@ build_edition() {
 
     mkdir -p "${dist_dir}"
 
+    # The Vulkan renderer and the desktop launcher cannot be built for this target, and the compiler based dependency
+    # scanner does not work with the devkitARM toolchain file.
     cmake -S "${REPO_ROOT}" -B "${build_dir}" \
+        -G "Unix Makefiles" \
         -DCMAKE_TOOLCHAIN_FILE="${DEVKITPRO}/cmake/3DS.cmake" \
         -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_DEPENDS_USE_COMPILER=FALSE \
+        -DPSYDOOM_INCLUDE_VULKAN_RENDERER=OFF \
+        -DPSYDOOM_INCLUDE_LAUNCHER=OFF \
         -DPSYDOOM_3DS_VARIANT="${edition}" \
-        -DPSYDOOM_3DS_ICON="${pkg_dir}/icon.png" \
         -DPSYDOOM_3DS_ROMFS_DIR="${REPO_ROOT}/romfs/${edition}" \
+        -DPSYDOOM_3DS_ICON="${pkg_dir}/icon.png" \
         > /dev/null
 
     cmake --build "${build_dir}" --parallel "${jobs}"

@@ -104,6 +104,24 @@ Or pass -SkipCia to build only the .3dsx, which needs neither.
 }
 
 # ------------------------------------------------------------------------------------------------------------------
+# devkitPro's toolchain file is written for its own MSYS environment, so every path handed to CMake - including
+# DEVKITPRO and DEVKITARM themselves - has to be in MSYS form. Windows form fails inside the toolchain file rather
+# than at the command line, which makes it look like a CMake bug rather than a path one.
+# ------------------------------------------------------------------------------------------------------------------
+function ConvertTo-MsysPath([string] $Path) {
+    $resolved = [System.IO.Path]::GetFullPath($Path)
+
+    if ($resolved -notmatch '^([A-Za-z]):\\(.*)$') {
+        Fail "Cannot convert path to MSYS form: $resolved"
+    }
+
+    return '/' + $Matches[1].ToLowerInvariant() + '/' + $Matches[2].Replace('\', '/')
+}
+
+$env:DEVKITPRO = ConvertTo-MsysPath $DevkitPro
+$env:DEVKITARM = ConvertTo-MsysPath (Join-Path $DevkitPro 'devkitARM')
+
+# ------------------------------------------------------------------------------------------------------------------
 # Finding the disc
 # ------------------------------------------------------------------------------------------------------------------
 function Find-EditionCue([string] $EditionName) {
@@ -175,18 +193,21 @@ foreach ($name in $Edition) {
     $distDir = Join-Path $RepoRoot "dist\$name"
     New-Item -ItemType Directory -Force -Path $distDir | Out-Null
 
-    function ConvertTo-MsysPath([string] $Path) {
-        $full = (Resolve-Path -LiteralPath $Path -ErrorAction SilentlyContinue)
-        if (-not $full) { $full = $Path } else { $full = $full.Path }
-        return '/' + $full.Substring(0, 1).ToLowerInvariant() + $full.Substring(2).Replace('\', '/')
-    }
+    $configureArgs = @(
+        '-S', (ConvertTo-MsysPath $RepoRoot),
+        '-B', (ConvertTo-MsysPath $buildDir),
+        '-G', 'Unix Makefiles',
+        "-DCMAKE_TOOLCHAIN_FILE=$(ConvertTo-MsysPath $ToolchainFile)",
+        '-DCMAKE_BUILD_TYPE=Release',
+        '-DCMAKE_DEPENDS_USE_COMPILER=FALSE',
+        '-DPSYDOOM_INCLUDE_VULKAN_RENDERER=OFF',
+        '-DPSYDOOM_INCLUDE_LAUNCHER=OFF',
+        "-DPSYDOOM_3DS_VARIANT=$name",
+        "-DPSYDOOM_3DS_ROMFS_DIR=$(ConvertTo-MsysPath (Join-Path $RepoRoot "romfs\$name"))",
+        "-DPSYDOOM_3DS_ICON=$(ConvertTo-MsysPath (Join-Path $pkgDir 'icon.png'))"
+    )
 
-    & $Cmake -S (ConvertTo-MsysPath $RepoRoot) -B (ConvertTo-MsysPath $buildDir) `
-        "-DCMAKE_TOOLCHAIN_FILE=$(ConvertTo-MsysPath $ToolchainFile)" `
-        '-DCMAKE_BUILD_TYPE=Release' `
-        "-DPSYDOOM_3DS_VARIANT=$name" `
-        "-DPSYDOOM_3DS_ICON=$(ConvertTo-MsysPath (Join-Path $pkgDir 'icon.png'))" `
-        "-DPSYDOOM_3DS_ROMFS_DIR=$(ConvertTo-MsysPath (Join-Path $RepoRoot "romfs\$name"))" | Out-Null
+    & $Cmake @configureArgs | Out-Null
     if ($LASTEXITCODE) { Fail 'CMake configure failed.' }
 
     & $Cmake --build (ConvertTo-MsysPath $buildDir) --parallel $Jobs
