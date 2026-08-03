@@ -122,6 +122,11 @@ void XOptions_Init() noexcept {
 // Shuts down the menu
 //------------------------------------------------------------------------------------------------------------------------------------------
 void XOptions_Shutdown([[maybe_unused]] const gameaction_t exitAction) noexcept {
+    // PsyDoom 3DS: settings are changed here, and the game may never get a clean exit in which to save them
+    #if PSYDOOM_3DS
+        PlayerPrefs::flushToDisk();
+    #endif
+
     gCursorPos[gCurPlayerIndex] = 0;
 }
 

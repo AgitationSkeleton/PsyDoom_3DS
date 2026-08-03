@@ -500,6 +500,9 @@ void Controls3DS_Init() noexcept {
 // Shuts down the screen
 //------------------------------------------------------------------------------------------------------------------------------------------
 void Controls3DS_Shutdown([[maybe_unused]] const gameaction_t exitAction) noexcept {
+    // The scheme and any rebinding done here have to survive the console being closed rather than exited
+    PlayerPrefs::flushToDisk();
+
     S_StartSound(nullptr, sfx_pistol);
 }
 

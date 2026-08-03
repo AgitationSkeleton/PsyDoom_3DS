@@ -328,7 +328,14 @@ static void drawTopScreen(const bool bUseDrawArea = false) noexcept {
     const Screens3DS::BottomScreen bottomScreenMode = Screens3DS::getBottomScreen();
     const int32_t menuSplitY = Screens3DS::getMenuSplitY();
 
-    if (bottomScreenMode == Screens3DS::BottomScreen::MenuTwoPass) {
+    // Note the 'bUseDrawArea' test as well as the mode.
+    //
+    // Taking the top screen's rows out of the frame is only right while a two pass menu is banking its first pass,
+    // which is the only time this is called with the draw area. Reaching here any other way means something presented
+    // a frame that the menu had only drawn its second pass into - and taking the top screen's rows out of that puts
+    // the touch screen's contents on the top screen, which is what starting a game used to look like. Fall through to
+    // presenting the frame whole in that case: it is never right, but it is never nonsense either.
+    if ((bottomScreenMode == Screens3DS::BottomScreen::MenuTwoPass) && bUseDrawArea) {
         // A menu that composes each screen separately: present exactly the rows it asked for, which are chosen so the
         // scale comes out uniform and fills the display
         copyToScreen(

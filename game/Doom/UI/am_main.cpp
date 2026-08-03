@@ -144,20 +144,20 @@ static void AM_Update3DSTouchPan(player_t& player) noexcept {
         }
     }
 
-    if (touch.bJustPressed) {
-        lastTouchX = touchX;
-        lastTouchY = touchY;
-        bWasDown = true;
-        return;
-    }
-
-    if (touch.bJustReleased) {
+    // Nothing being touched: whatever drag there was is over
+    if (!touch.bDown) {
         bWasDown = false;
         return;
     }
 
-    if ((!touch.bDown) || (!bWasDown))
+    // First look at a new touch: note where it started and wait for it to move. Deliberately keyed off the stylus
+    // being down rather than off the frame it went down on, which this may never see.
+    if (!bWasDown) {
+        bWasDown = true;
+        lastTouchX = touchX;
+        lastTouchY = touchY;
         return;
+    }
 
     const int32_t dragX = touchX - lastTouchX;
     const int32_t dragY = touchY - lastTouchY;
@@ -165,6 +165,13 @@ static void AM_Update3DSTouchPan(player_t& player) noexcept {
     lastTouchY = touchY;
 
     if ((dragX == 0) && (dragY == 0))
+        return;
+
+    // A stylus cannot travel this far in one tick. If it appears to have, tracking was lost rather than the player
+    // having flicked across the screen, and acting on it would throw the map somewhere unrelated.
+    constexpr int32_t MAX_DRAG_PIXELS_PER_TICK = 80;
+
+    if ((std::abs(dragX) > MAX_DRAG_PIXELS_PER_TICK) || (std::abs(dragY) > MAX_DRAG_PIXELS_PER_TICK))
         return;
 
     // Starting a drag takes the map off the player; seed the free camera where the player currently is so the map does

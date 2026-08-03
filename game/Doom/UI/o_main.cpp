@@ -186,6 +186,11 @@ void O_Init() noexcept {
 // Shuts down the options menu
 //------------------------------------------------------------------------------------------------------------------------------------------
 void O_Shutdown([[maybe_unused]] const gameaction_t exitAction) noexcept {
+    // PsyDoom 3DS: sound volumes and anything reached from here have to survive the console being closed
+    #if PSYDOOM_3DS
+        PlayerPrefs::flushToDisk();
+    #endif
+
     // Reset the cursor position for all players
     for (int32_t playerIdx = 0; playerIdx < MAXPLAYERS; ++playerIdx) {
         gCursorPos[playerIdx] = 0;

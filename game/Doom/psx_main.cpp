@@ -86,6 +86,12 @@ int psx_main(const int argc, const char* const* const argv) noexcept {
         PlayerPrefs::load();
         PSYDOOM_3DS_LOG("psx_main: player preferences loaded");
 
+        // Only now that there are real settings in memory is it safe to arrange for them to be written back: a HOME
+        // press before this point would have saved the defaults over whatever the player actually had.
+        #if PSYDOOM_3DS
+            Platform3DS::installHomeButtonSaveHook();
+        #endif
+
         // Initialize the emulated PSX components using the PSX Doom disc (supplied as a .cue file).
         // This must be provided in order for the game to run.
         const char* const cueFilePath = (ProgArgs::gCueFileOverride) ? ProgArgs::gCueFileOverride : Config::gCueFilePath.c_str();
@@ -140,7 +146,18 @@ int psx_main(const int argc, const char* const* const argv) noexcept {
         const bool bIsCheckingADemoResult = (ProgArgs::gCheckDemoResultFilePath[0] != 0);
 
         if (!ProgArgs::gbHeadlessMode) {
-            PlayerPrefs::save();
+            // PsyDoom 3DS: write the control bindings out as well as the preferences.
+            //
+            // 'Config::shutdown' below only clears the config structures; nothing writes them back. On desktop that is
+            // fine, because the launcher is what edits them. There is no launcher here - bindings are changed in game -
+            // and without this a scheme picked in the menu was remembered while the bindings it applied were not, so
+            // the next launch read back the old bindings, found they disagreed with the saved scheme, and called the
+            // layout 'Custom'. Which looked exactly like nothing having been saved at all.
+            #if PSYDOOM_3DS
+                PlayerPrefs::flushToDisk();
+            #else
+                PlayerPrefs::save();
+            #endif
         }
 
         IntroLogos::shutdown();

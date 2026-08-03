@@ -15,6 +15,7 @@
 #include "Wess/psxspu.h"
 
 #if PSYDOOM_3DS
+    #include "Config/ConfigSerialization.h"
     #include "ControlSchemes3DS.h"
     #include "Doom/Renderer/r_main.h"
     #include "Gpu.h"
@@ -298,6 +299,14 @@ void setControlScheme(const int32_t scheme) noexcept {
 void resetControlsToDefault() noexcept {
     ControlSchemes3DS::applyScheme(ControlSchemes3DS::DEFAULT_SCHEME);
     gControlScheme = (int32_t) ControlSchemes3DS::Scheme::Custom;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: write everything out now. See the header for why this cannot wait until the game exits.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void flushToDisk() noexcept {
+    save();
+    ConfigSerialization::writeAllConfigFiles(false);
 }
 
 void applyDetailMode() noexcept {

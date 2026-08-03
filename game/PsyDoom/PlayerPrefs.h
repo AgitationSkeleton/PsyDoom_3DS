@@ -74,6 +74,13 @@ extern Password             gLastPassword_GecMe;
     // Puts the default layout in place as a custom one, so it can then be edited freely
     void resetControlsToDefault() noexcept;
 
+    // Writes the preferences and the control bindings out now, rather than waiting for the game to exit.
+    //
+    // Nothing on a 3DS exits the way a desktop program does: the player presses HOME and closes the app, and the
+    // process is ended where it stands. The cleanup at the end of 'psx_main' never runs, so anything only written
+    // there is never written at all - which is why settings changed in a menu did not survive a restart.
+    void flushToDisk() noexcept;
+
     // Applies 'gStatusBarPos' to the renderer's view height
     void applyStatusBarPlacement() noexcept;
 

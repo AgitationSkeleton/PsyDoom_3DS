@@ -22,6 +22,10 @@ bool isNew3DS() noexcept;
 // immediately afterwards. That is far too slow for anything per frame, and is only used while starting up.
 //--------------------------------------------------------------------------------------------------------------------------------------
 void logOpen() noexcept;
+
+// Arranges for settings to be written out when the player presses HOME, which is how the game is usually left.
+// Call once at startup; safe to call before anything the callback touches has been used.
+void installHomeButtonSaveHook() noexcept;
 void logf(const char* const format, ...) noexcept;
 
 // Where 'logf' writes, for telling the player where to look

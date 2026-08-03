@@ -18,10 +18,16 @@ BEGIN_NAMESPACE(Screens3DS)
 // What the screens are showing
 //------------------------------------------------------------------------------------------------------------------------------------------
 static BottomScreen gBottomScreen = BottomScreen::Blank;
+static bool     gbTopScreenAlreadyDrawn = false;
 static int32_t      gMenuSplitY = DEFAULT_MENU_SPLIT_Y;
 static int32_t      gMenuHeaderWidth = DEFAULT_MENU_HEADER_WIDTH;
 
 void setBottomScreen(const BottomScreen mode, const int32_t splitY, const int32_t headerContentWidth) noexcept {
+    // A different screen is composing now, so any half finished frame from the last one is void
+    if (mode != gBottomScreen) {
+        gbTopScreenAlreadyDrawn = false;
+    }
+
     gBottomScreen = mode;
     gMenuSplitY = std::clamp<int32_t>(splitY, 0, 200);
     gMenuHeaderWidth = std::clamp<int32_t>(headerContentWidth, 32, 256);
@@ -44,7 +50,6 @@ int32_t getMenuHeaderWidth() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 static int32_t  gMenuTopPassSrcY = 0;
 static int32_t  gMenuBottomPassSrcY = 0;
-static bool     gbTopScreenAlreadyDrawn = false;
 
 void setMenuTwoPassRows(const int32_t topSrcY, const int32_t bottomSrcY) noexcept {
     gMenuTopPassSrcY = std::clamp<int32_t>(topSrcY, 0, 240 - MENU_TOP_PASS_ROWS);
