@@ -199,10 +199,40 @@ prepare_metadata() {
         return
     fi
 
-    # Track 2 of the disc is the first music track. Taken raw because it is CD audio: 44.1 kHz, 16 bit, stereo.
-    local cue track_bin
+    # Track two is the first music track, taken raw because it is CD audio: 44.1 kHz, 16 bit, stereo.
+    #
+    # Two rip layouts turn up and the track has to be found differently in each. One file per track puts it in a file
+    # of its own; one file for the whole disc leaves it inside that file, with the cue giving its start as MM:SS:FF.
+    # The Master Edition is the second kind, and only looking for a second file meant nothing was found there at all -
+    # so its banner came out silent.
+    local cue cue_dir track_bin skip_seconds file_list
     cue="$(find_edition_cue "${edition}" "${disc_dir}")"
-    track_bin="$(dirname "${cue}")/$(sed -n 's/^[[:space:]]*FILE[[:space:]]*"\(.*\)".*/\1/p' "${cue}" | sed -n '2p')"
+    cue_dir="$(dirname "${cue}")"
+    file_list="$(tr -d '\r' < "${cue}" | sed -n 's/^[[:space:]]*FILE[[:space:]]*"\(.*\)".*/\1/p')"
+
+    if [ "$(printf '%s\n' "${file_list}" | grep -c .)" -ge 2 ]; then
+        track_bin="${cue_dir}/$(printf '%s\n' "${file_list}" | sed -n '2p')"
+        skip_seconds=5
+    else
+        track_bin="${cue_dir}/$(printf '%s\n' "${file_list}" | sed -n '1p')"
+
+        # Where the cue says track two starts, as MM:SS:FF at 75 frames a second, plus a few seconds to get past the
+        # quiet lead-in.
+        local stamp
+        stamp="$(tr -d '\r' < "${cue}" | awk '
+            toupper($1) == "TRACK" && $2 + 0 == 2 { in_track = 1; next }
+            toupper($1) == "TRACK" { in_track = 0 }
+            in_track && toupper($1) == "INDEX" && $2 + 0 == 1 { print $3; exit }
+        ')"
+
+        if [[ -z "${stamp}" ]]; then
+            warn "  the cue does not say where the music starts, so the banner will be silent"
+            ffmpeg -hide_banner -loglevel error -y -f lavfi -i anullsrc=r=16364:cl=stereo -t 3 -c:a pcm_s16le "${banner_wav}"
+            return
+        fi
+
+        skip_seconds="$(awk -v s="${stamp}" 'BEGIN { split(s, p, ":"); printf "%.2f", p[1] * 60 + p[2] + p[3] / 75 + 3 }')"
+    fi
 
     if [[ ! -f "${track_bin}" ]]; then
         warn "  could not find the disc's music track, so the banner will be silent"
@@ -210,12 +240,12 @@ prepare_metadata() {
         return
     fi
 
-    info "  banner audio: from $(basename "${track_bin}")"
+    info "  banner audio: from $(basename "${track_bin}") at ${skip_seconds}s"
 
     # 16364 Hz stereo, exactly three seconds. These are not preferences: banner audio outside them plays as noise.
     # See packaging/BANNER_ASSETS.md.
     ffmpeg -hide_banner -loglevel error -y \
-        -f s16le -ar 44100 -ac 2 -ss 5 -i "${track_bin}" \
+        -f s16le -ar 44100 -ac 2 -ss "${skip_seconds}" -i "${track_bin}" \
         -t 3 -af "volume=1.65,afade=t=in:st=0:d=0.10,afade=t=out:st=2.75:d=0.25" \
         -ar 16364 -ac 2 -c:a pcm_s16le "${banner_wav}"
 
