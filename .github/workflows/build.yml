@@ -1,0 +1,118 @@
+name: Build
+
+# Compiles the engine for all three editions on every push.
+#
+# This builds no playable package and needs no game data: it produces the .3dsx alone, without the RomFS that carries
+# the disc. That is the whole point - it proves the source and the build scripts still compile for the 3DS without any
+# copyrighted material being anywhere near the runner.
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  engine:
+    name: ${{ matrix.edition }}
+    runs-on: ubuntu-latest
+    container: devkitpro/devkitarm:latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        edition: [doom, final_doom, master_edition]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Check the toolchain is where the build scripts expect
+        run: |
+          set -eu
+          : "${DEVKITPRO:=/opt/devkitpro}"
+          echo "DEVKITPRO=${DEVKITPRO}" >> "${GITHUB_ENV}"
+          test -d "${DEVKITPRO}/devkitARM" || { echo "No devkitARM under ${DEVKITPRO}"; exit 1; }
+          test -f "${DEVKITPRO}/cmake/3DS.cmake" || { echo "Missing ${DEVKITPRO}/cmake/3DS.cmake"; exit 1; }
+          cmake --version
+
+      - name: Configure
+        run: |
+          set -eu
+          # The same options tools/3ds/common.sh uses, minus the RomFS: no disc data exists here, and CMake only
+          # attaches one when PSYDOOM_3DS_ROMFS_DIR is set. The Vulkan renderer and the desktop launcher cannot be
+          # built for this target, and the compiler based dependency scanner does not work with devkitARM.
+          cmake -S . -B build \
+            -G "Unix Makefiles" \
+            -DCMAKE_TOOLCHAIN_FILE="${DEVKITPRO}/cmake/3DS.cmake" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_DEPENDS_USE_COMPILER=FALSE \
+            -DPSYDOOM_INCLUDE_VULKAN_RENDERER=OFF \
+            -DPSYDOOM_INCLUDE_LAUNCHER=OFF \
+            -DPSYDOOM_3DS_VARIANT="${{ matrix.edition }}" \
+            -DPSYDOOM_3DS_ICON="${PWD}/packaging/${{ matrix.edition }}/icon.png"
+
+      - name: Build
+        run: cmake --build build --parallel "$(nproc)"
+
+      - name: Check something came out
+        run: |
+          set -eu
+          test -f build/game/PsyDoom.3dsx || { echo "No .3dsx was produced"; exit 1; }
+          ls -l build/game/PsyDoom.3dsx build/game/PsyDoom.smdh
+
+  scripts:
+    name: build scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Parse the shell scripts
+        run: |
+          set -eu
+          for script in tools/3ds/*.sh; do
+            bash -n "${script}"
+            echo "ok ${script}"
+          done
+
+      - name: Parse the Python helpers
+        run: |
+          set -eu
+          for helper in tools/3ds/*.py; do
+            python3 -m py_compile "${helper}"
+            echo "ok ${helper}"
+          done
+
+      - name: Check the PowerShell script parses
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [Management.Automation.Language.Parser]::ParseFile((Resolve-Path tools/3ds/build.ps1), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) {
+            $errors | ForEach-Object { Write-Error $_ }
+            throw 'PowerShell parse errors in tools/3ds/build.ps1'
+          }
+          Write-Host 'ok tools/3ds/build.ps1'
+
+      - name: No game data in the repository
+        run: |
+          set -eu
+          # Nothing that could carry a disc, a rip of one, or the audio taken off it belongs here. The banner audio is
+          # the one that has to be watched: it is built from the player's own disc and is meant to stay on their
+          # machine, so it is gitignored, and this is what catches it being committed anyway.
+          #
+          # 'extras' is left out on purpose. It comes from upstream PsyDoom and is not ours to police here.
+          found="$(git ls-files -- . ':!extras' | grep -Ei '\.(bin|cue|iso|img|wav|xa|vb|vh|lcd|wmd|zip)$' || true)"
+          if [ -n "${found}" ]; then
+            echo "These look like game data and must not be committed:"
+            echo "${found}"
+            exit 1
+          fi
+          echo "ok - no game data committed"
