@@ -447,7 +447,12 @@ void ST_Drawer() noexcept {
 
     if (gStatusBar.messageTicsLeft > 0) {
         // PsyDoom: have to explicitly specify sprite shading parameters now for 'draw string' rather than relying on global state
-        #if PSYDOOM_MODS
+        #if PSYDOOM_3DS
+            // With the bar on the touch screen this already went on with the view, in 'ST_DrawMessage'
+            if (PlayerPrefs::gStatusBarPos == PlayerPrefs::STATUS_BAR_TOP_SCREEN) {
+                ST_DrawMessage();
+            }
+        #elif PSYDOOM_MODS
             I_DrawStringSmall(7, 193, gStatusBar.message, uiPaletteClutId, 128, 128, 128, false, true);
         #else
             I_DrawStringSmall(7, 193, gStatusBar.message);
@@ -685,7 +690,22 @@ void ST_Drawer() noexcept {
 //
 // Grouped together because they share a requirement: they have to be drawn while the 3D view is still being composed.
 //------------------------------------------------------------------------------------------------------------------------------------------
+void ST_DrawMessage() noexcept {
+    if (gStatusBar.messageTicsLeft <= 0)
+        return;
+
+    // Sits just above the bottom of the 3D view, which is taller when the status bar has moved to the touch screen.
+    // At the PlayStation's view height this is the 193 the message was always drawn at.
+    const int32_t msgY = gViewHeight - 7;
+
+    I_DrawStringSmall(7, msgY, gStatusBar.message, Game::getTexClut_STATUS(), 128, 128, 128, false, true);
+}
+
 void ST_DrawViewOverlays() noexcept {
+    // Drawn here rather than with the status bar it belongs to: the bar is on the touch screen whenever this runs, and
+    // the message has to go on the top screen with the view it is telling the player about
+    ST_DrawMessage();
+
     ST_DrawLevelStats();
 
     if (gbGamePaused) {

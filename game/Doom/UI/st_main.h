@@ -81,6 +81,9 @@ void ST_Ticker() noexcept;
     // the same moment. See the definition.
     void ST_DrawLevelStats() noexcept;
 
+    // PsyDoom: the pickup message. Drawn on its own because it does not always go on with the rest of the bar.
+    void ST_DrawMessage() noexcept;
+
     // PsyDoom: everything drawn over the 3D view rather than as part of the status bar. See the definition.
     void ST_DrawViewOverlays() noexcept;
 #endif

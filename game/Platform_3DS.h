@@ -26,6 +26,13 @@ void logOpen() noexcept;
 // Arranges for settings to be written out when the player presses HOME, which is how the game is usually left.
 // Call once at startup; safe to call before anything the callback touches has been used.
 void installHomeButtonSaveHook() noexcept;
+
+// Somewhere to idle while waiting for something, without touching either screen.
+//
+// Whatever is on the displays when a wait begins is a finished frame, and repainting them from the PlayStation
+// framebuffer would show whichever drawing pass was left in it rather than anything meant to be seen. Waiting on the
+// vertical blank gives up the CPU for a frame and leaves both screens exactly as they are.
+void idleWait() noexcept;
 void logf(const char* const format, ...) noexcept;
 
 // Where 'logf' writes, for telling the player where to look

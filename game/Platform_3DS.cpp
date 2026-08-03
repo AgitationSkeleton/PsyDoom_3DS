@@ -218,6 +218,10 @@ void installHomeButtonSaveHook() noexcept {
     aptHook(&gAptHookCookie, onAptHook, nullptr);
 }
 
+void idleWait() noexcept {
+    gspWaitForVBlank();
+}
+
 //--------------------------------------------------------------------------------------------------------------------------------------
 // Startup logging: see the header for why every line is flushed and closed on its own
 //--------------------------------------------------------------------------------------------------------------------------------------

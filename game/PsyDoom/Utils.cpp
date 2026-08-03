@@ -222,9 +222,14 @@ static bool waitForCond(const T& condLamba) noexcept {
         //
         // Vulkan backend: this causes issues with certain things like crossfade, which rely on previous framebuffers.
         // Don't do this if we are outputting via Vulkan.
-        if (Video::gBackendType != Video::BackendType::Vulkan) {
-            Video::displayFramebuffer();
-        }
+        // PsyDoom 3DS: idle on the vertical blank rather than repainting. See the note above 'idleWait'.
+        #if PSYDOOM_3DS
+            Platform3DS::idleWait();
+        #else
+            if (Video::gBackendType != Video::BackendType::Vulkan) {
+                Video::displayFramebuffer();
+            }
+        #endif
 
         Utils::threadYield();
         doPlatformUpdates();
