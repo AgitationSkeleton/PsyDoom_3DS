@@ -216,7 +216,7 @@ prepare_metadata() {
     # See packaging/BANNER_ASSETS.md.
     ffmpeg -hide_banner -loglevel error -y \
         -f s16le -ar 44100 -ac 2 -ss 5 -i "${track_bin}" \
-        -t 3 -af "volume=0.55,afade=t=in:st=0:d=0.10,afade=t=out:st=2.75:d=0.25" \
+        -t 3 -af "volume=1.65,afade=t=in:st=0:d=0.10,afade=t=out:st=2.75:d=0.25" \
         -ar 16364 -ac 2 -c:a pcm_s16le "${banner_wav}"
 
     python3 "${REPO_ROOT}/tools/3ds/check_banner_audio.py" "${banner_wav}"
