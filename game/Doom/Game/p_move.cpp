@@ -342,10 +342,10 @@ static void PM_CheckPosition() noexcept {
 
     if (bDoThingCollisons) {
         // Compute the blockmap extents to check for collisions against other things and clamp to a valid range
-        const int32_t bmapLx = std::max(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXLEFT] - gBlockmapOriginX - MAXRADIUS), 0);
+        const int32_t bmapLx = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXLEFT] - gBlockmapOriginX - MAXRADIUS), 0);
         const int32_t bmapRx = std::min(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXRIGHT] - gBlockmapOriginX + MAXRADIUS), gBlockmapWidth - 1);
         const int32_t bmapTy = std::min(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXTOP] - gBlockmapOriginY + MAXRADIUS), gBlockmapHeight - 1);
-        const int32_t bmapBy = std::max(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXBOTTOM] - gBlockmapOriginY - MAXRADIUS), 0);
+        const int32_t bmapBy = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXBOTTOM] - gBlockmapOriginY - MAXRADIUS), 0);
 
         // Test against everything in this blockmap range; stop and set the result 'false' if a definite collision happens
         for (int32_t x = bmapLx; x <= bmapRx; ++x) {
@@ -360,10 +360,10 @@ static void PM_CheckPosition() noexcept {
 
     // Do collision against lines
     {
-        const int32_t bmapLx = std::max(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXLEFT] - gBlockmapOriginX), 0);
+        const int32_t bmapLx = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXLEFT] - gBlockmapOriginX), 0);
         const int32_t bmapRx = std::min(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXRIGHT] - gBlockmapOriginX), gBlockmapWidth - 1);
         const int32_t bmapTy = std::min(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXTOP] - gBlockmapOriginY), gBlockmapHeight - 1);
-        const int32_t bmapBy = std::max(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXBOTTOM] - gBlockmapOriginY), 0);
+        const int32_t bmapBy = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(gTestTmBBox[BOXBOTTOM] - gBlockmapOriginY), 0);
 
         // Test against everything in this blockmap range; stop and set the result 'false' if a definite collision happens
         for (int32_t x = bmapLx; x <= bmapRx; ++x) {

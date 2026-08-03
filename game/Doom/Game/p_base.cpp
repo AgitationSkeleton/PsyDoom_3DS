@@ -512,10 +512,10 @@ static bool PB_CheckPosition() noexcept {
     #endif
 
     // Determine the blockmap extents (left/right, top/bottom) to be tested against for collision and clamp to a valid range
-    const int32_t bmapLx = std::max(d_rshift<MAPBLOCKSHIFT>(gTestBBox[BOXLEFT] - gBlockmapOriginX - MAXRADIUS), 0);
+    const int32_t bmapLx = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(gTestBBox[BOXLEFT] - gBlockmapOriginX - MAXRADIUS), 0);
     const int32_t bmapRx = std::min(d_rshift<MAPBLOCKSHIFT>(gTestBBox[BOXRIGHT] - gBlockmapOriginX + MAXRADIUS), gBlockmapWidth - 1);
     const int32_t bmapTy = std::min(d_rshift<MAPBLOCKSHIFT>(gTestBBox[BOXTOP] - gBlockmapOriginY + MAXRADIUS), gBlockmapHeight - 1);
-    const int32_t bmapBy = std::max(d_rshift<MAPBLOCKSHIFT>(gTestBBox[BOXBOTTOM] - gBlockmapOriginY - MAXRADIUS), 0);
+    const int32_t bmapBy = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(gTestBBox[BOXBOTTOM] - gBlockmapOriginY - MAXRADIUS), 0);
 
     // This is a new collision test so increment this stamp
     gValidCount++;

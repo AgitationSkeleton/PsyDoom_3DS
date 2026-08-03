@@ -12,6 +12,11 @@
 #include "PsyDoom/Config/Config.h"
 #include "PsyDoom/Game.h"
 #include "PsyDoom/PlayerPrefs.h"
+#include "PsyDoom/Utils.h"
+
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+#endif
 #include "PsyQ/LIBGPU.h"
 #include "PsyQ/LIBGTE.h"
 #include "r_bsp.h"
@@ -37,6 +42,32 @@ angle_t     gViewAngle;
 fixed_t     gViewCos;
 fixed_t     gViewSin;
 bool        gbIsSkyVisible;
+
+#if PSYDOOM_3DS
+    int32_t gViewHeight = BASE_VIEW_3D_H;
+    int32_t gHalfViewHeight = BASE_VIEW_3D_H / 2;
+#endif
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Sets the height of the 3D view and rebuilds everything that depends on it.
+//
+// This is PsyDoom 3DS's equivalent of vanilla Doom's 'R_ExecuteSetViewSize': changing the view height moves the horizon
+// and therefore changes the slope of every row, so the slope table has to be rebuilt. Growing the view reveals more of
+// the world below the horizon and more of the player's weapon, which is what vanilla's largest screen size does.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void R_SetViewHeight([[maybe_unused]] const int32_t viewHeight) noexcept {
+    #if PSYDOOM_3DS
+        gViewHeight = std::clamp<int32_t>(viewHeight, 64, MAX_VIEW_3D_H);
+        gHalfViewHeight = gViewHeight / 2;
+    #endif
+
+    for (int32_t i = 0; i < gViewHeight; ++i) {
+        const int32_t rowsFromHorizon = gHalfViewHeight - i;
+
+        // The horizon itself is infinitely far away; the original table stores zero for that row
+        gYSlope[i] = (rowsFromHorizon != 0) ? ((HALF_SCREEN_W << FRACBITS) / rowsFromHorizon) : 0;
+    }
+}
 MATRIX      gDrawMatrix;
 
 // Light properties
@@ -228,6 +259,24 @@ void R_RenderPlayerView() noexcept {
         }
     #endif
 
+    // PsyDoom 3DS: stereoscopic 3D shifts the eye sideways from the player's position.
+    // The view direction is unchanged (parallel eyes rather than converged), which keeps distant geometry comfortable
+    // and avoids the whole scene appearing to sit behind the screen.
+    #if PSYDOOM_3DS
+    {
+        const int32_t renderEye = Screens3DS::getRenderEye();
+
+        if (renderEye != 0) {
+            const fixed_t separation = (fixed_t) Screens3DS::getEyeSeparation() * renderEye;
+            const uint32_t rightFineAngle = (gViewAngle - ANG90) >> ANGLETOFINESHIFT;
+
+            // Note: re-truncate afterwards, the renderer assumes the view position has no fractional part
+            gViewX = (gViewX + FixedMul(gFineCosine[rightFineAngle], separation)) & (~FRACMASK);
+            gViewY = (gViewY + FixedMul(gFineSine[rightFineAngle], separation)) & (~FRACMASK);
+        }
+    }
+    #endif
+
     gViewCos = gFineCosine[gViewAngle >> ANGLETOFINESHIFT];
     gViewSin = gFineSine[gViewAngle >> ANGLETOFINESHIFT];
 
@@ -244,7 +293,9 @@ void R_RenderPlayerView() noexcept {
     #endif
 
     // Traverse the BSP tree to determine what needs to be drawn and in what order
+    PSYDOOM_PROF_BEGIN(Bsp);
     R_BSP();
+    PSYDOOM_PROF_END(Bsp);
 
     // Stat tracking: how many subsectors will we draw?
     // PsyDoom: if doing limit removing then we already have this count in the std::vector.
@@ -259,7 +310,9 @@ void R_RenderPlayerView() noexcept {
     #endif
 
     if (gbIsSkyVisible) {
+        PSYDOOM_PROF_BEGIN(Sky);
         R_DrawSky();
+        PSYDOOM_PROF_END(Sky);
     }
 
     // PsyDoom: increment the marker used to determine when to update the shading params for each sector
@@ -326,7 +379,9 @@ void R_RenderPlayerView() noexcept {
     // PsyDoom: skip if we're using the external camera.
     #if PSYDOOM_MODS
         if (gExtCameraTicsLeft <= 0) {
+            PSYDOOM_PROF_BEGIN(Weapon);
             R_DrawWeapon();
+            PSYDOOM_PROF_END(Weapon);
         }
     #else
         R_DrawWeapon();
@@ -780,7 +835,7 @@ light_t R_GetSectorLightColor(const sector_t& sector, const fixed_t z) noexcept 
     // Otherwise use linear interpolation to figure out the color
     const light_t upperColor = pLights[upperColorIdx];
 
-    const fixed_t t = std::min((std::max(z - sector.lowerColorZ, 0) >> FRACBITS) * sector.shadeHeightDiv, FRACUNIT);
+    const fixed_t t = std::min<fixed_t>((std::max<fixed_t>(z - sector.lowerColorZ, 0) >> FRACBITS) * sector.shadeHeightDiv, FRACUNIT);
     const fixed_t tInv = FRACUNIT - t;
 
     const uint32_t r = (lowerColor.r * tInv + upperColor.r * t) >> FRACBITS;
@@ -788,9 +843,9 @@ light_t R_GetSectorLightColor(const sector_t& sector, const fixed_t z) noexcept 
     const uint32_t b = (lowerColor.b * tInv + upperColor.b * t) >> FRACBITS;
 
     return {
-        (uint8_t) std::clamp(r, 0u, 255u),
-        (uint8_t) std::clamp(g, 0u, 255u),
-        (uint8_t) std::clamp(b, 0u, 255u),
+        (uint8_t) std::clamp<uint32_t>(r, 0u, 255u),
+        (uint8_t) std::clamp<uint32_t>(g, 0u, 255u),
+        (uint8_t) std::clamp<uint32_t>(b, 0u, 255u),
     };
 }
 
@@ -818,9 +873,9 @@ void R_GetSectorDrawColor(const sector_t& sector, const fixed_t z, uint8_t& r, u
         b32 += extraLight;
 
         // Return the saturated light value
-        r = (uint8_t) std::min(r32, 255u);
-        g = (uint8_t) std::min(g32, 255u);
-        b = (uint8_t) std::min(b32, 255u);
+        r = (uint8_t) std::min<uint32_t>(r32, 255u);
+        g = (uint8_t) std::min<uint32_t>(g32, 255u);
+        b = (uint8_t) std::min<uint32_t>(b32, 255u);
     } else {
         // No lighting - render full bright!
         r = 128;

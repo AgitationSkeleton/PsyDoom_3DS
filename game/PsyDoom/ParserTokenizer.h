@@ -2,6 +2,7 @@
 
 #include "Macros.h"
 
+#include <cstdint>
 #include <functional>
 
 BEGIN_NAMESPACE(ParserTokenizer)

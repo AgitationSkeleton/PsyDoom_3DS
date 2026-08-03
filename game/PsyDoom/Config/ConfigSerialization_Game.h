@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ConfigSerialization.h"
 
@@ -10,13 +10,17 @@ BEGIN_NAMESPACE(ConfigSerialization)
 
 // N.B: must ONLY contain 'ConfigField' entries!
 struct Config_Game {
+#if !PSYDOOM_3DS
     ConfigField     cueFilePath;
+#endif
     ConfigField     showPerfCounters;
+#if !PSYDOOM_3DS
     ConfigField     interpolateSectors;
     ConfigField     interpolateMobj;
     ConfigField     interpolateMonsters;
     ConfigField     interpolateWeapon;
     ConfigField     mainMemoryHeapSize;
+#endif
     ConfigField     skipIntros;
     ConfigField     useFastLoading;
     ConfigField     enableSinglePlayerLevelTimer;
@@ -48,7 +52,9 @@ struct Config_Game {
     ConfigField     enableMapPatches_Visual;
     ConfigField     enableMapPatches_PsyDoom;
     ConfigField     viewBobbingStrength;
+#if !PSYDOOM_3DS
     ConfigField     pauseOnWindowFocusLost;
+#endif
 
     inline ConfigFieldList getFieldList() noexcept {
         static_assert(sizeof(*this) % sizeof(ConfigField) == 0);
@@ -61,3 +67,5 @@ extern Config_Game gConfig_Game;
 void initCfgSerialization_Game() noexcept;
 
 END_NAMESPACE(ConfigSerialization)
+
+

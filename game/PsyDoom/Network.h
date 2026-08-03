@@ -13,6 +13,12 @@ extern bool gbWasInitAborted;
 
 bool initForServer() noexcept;
 bool initForClient() noexcept;
+
+#if PSYDOOM_3DS
+    // 3DS local wireless: works out by itself whether to host or join, then establishes the link.
+    // Sets 'ProgArgs::gbIsNetServer' to match, since that is what decides who is player 1.
+    bool initFor3DSLocalWireless() noexcept;
+#endif
 void shutdown() noexcept;
 bool isConnected() noexcept;
 void doUpdates() noexcept;

@@ -53,7 +53,11 @@ bool gbPistolStart = false;
 bool gbTurboMode = false;
 
 // The map number and skill to use if warping on startup straight to a map.
-int32_t gWarpMap = 0;
+#if defined(PSYDOOM_3DS_BENCHMARK) && PSYDOOM_3DS_BENCHMARK
+    int32_t gWarpMap = 1;
+#else
+    int32_t gWarpMap = 0;
+#endif
 skill_t gWarpSkill = sk_hard;
 
 // Host that the client connects to: private so we don't expose std::string everywhere

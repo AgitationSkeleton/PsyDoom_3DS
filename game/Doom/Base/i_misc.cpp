@@ -1,4 +1,4 @@
-#include "i_misc.h"
+﻿#include "i_misc.h"
 
 #include "Doom/Game/g_game.h"
 #include "Doom/Game/p_tick.h"
@@ -265,7 +265,7 @@ void I_DrawPausedOverlay() noexcept {
     if (player.cheats & CF_WARPMENU) {
         // Draw the level warp menu
         char warpmsg[64];
-        std::sprintf(warpmsg, "warp to level %d", gMapNumToCheatWarpTo);
+        std::sprintf(warpmsg, "warp to level %d", static_cast<int>(gMapNumToCheatWarpTo));
         I_DrawString(-1, 40, warpmsg);
 
         #if PSYDOOM_MODS
@@ -326,7 +326,7 @@ void I_UpdatePalette() noexcept {
     if (player.powers[pw_strength] != 0) {
         // PsyDoom: using 'uint' here to fix warnings about mixing signed & unsigned integers, but make sure the quantity never goes below zero!
         #if PSYDOOM_MODS
-            const uint32_t berserkAmount = std::max(12 - d_rshift<6>(player.powers[pw_strength]), 0);
+            const uint32_t berserkAmount = std::max<int32_t>(12 - d_rshift<6>(player.powers[pw_strength]), 0);
         #else
             const int32_t berserkAmount = 12 - d_rshift<6>(player.powers[pw_strength]);
         #endif
@@ -554,3 +554,4 @@ void I_DrawString(const int32_t x, const int32_t y, const char* const str) noexc
         curX += fontchar.w;
     }
 }
+

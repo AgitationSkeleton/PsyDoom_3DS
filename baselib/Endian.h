@@ -28,6 +28,7 @@ inline constexpr bool isBig() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Swap bytes of integer types
 //------------------------------------------------------------------------------------------------------------------------------------------
+inline constexpr bool byteSwap(const bool value) noexcept { return value; }
 inline constexpr uint8_t byteSwap(const uint8_t num) noexcept { return num; }
 
 inline constexpr uint16_t byteSwap(const uint16_t num) noexcept {

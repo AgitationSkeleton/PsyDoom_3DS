@@ -109,7 +109,7 @@ spclface_e              gSpclFaceType;          // Which special face to use nex
 static void ST_DrawRightAlignedStat(const int32_t xMargin, const int32_t y, const char statChar, const int32_t statAmt, const int32_t statTotal) noexcept {
     // Make up the string to draw
     char strBuffer[32];
-    std::snprintf(strBuffer, C_ARRAY_SIZE(strBuffer), "%c:%d/%d", statChar, statAmt, statTotal);
+    std::snprintf(strBuffer, C_ARRAY_SIZE(strBuffer), "%c:%d/%d", statChar, static_cast<int>(statAmt), static_cast<int>(statTotal));
 
     // Figure out the x position to right align the string (taking into account the margin) and then draw
     const int32_t x = SCREEN_W - ((int32_t) std::strlen(strBuffer) * 8) - xMargin;
@@ -337,13 +337,71 @@ void ST_Ticker() noexcept {
     // Save the sprite info for the face that will be drawn.
     // PsyDoom: add extra safety to ensure the face stays in range.
     #if PSYDOOM_MODS
-        gStatusBar.face = std::clamp(gStatusBar.face, 0u, (uint32_t) NUMFACES - 1u);
+        gStatusBar.face = std::clamp<uint32_t>(gStatusBar.face, 0u, (uint32_t) NUMFACES - 1u);
     #endif
 
     gpCurSBFaceSprite = &gFaceSprites[gStatusBar.face];
 
     // Update the current palette in use
     I_UpdatePalette();
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom: draws the level stats overlay, or frags if playing deathmatch.
+//
+// Split out from the status bar drawing because the two do not always happen at the same moment: these sit over the
+// 3D view, and on 3DS the view can be banked to the top screen before the status bar is drawn at all.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void ST_DrawLevelStats() noexcept {
+    if (PlayerPrefs::gStatDisplayMode < StatDisplayMode::Kills)
+        return;
+
+    // These are sprites from the STATUS texture page, so point the GPU at it: whatever drew last may not have
+    const player_t& player = gPlayers[gCurPlayerIndex];
+
+    {
+        DR_MODE drawModePrim = {};
+        const SRECT texWindow = { (int16_t) gTex_STATUS.texPageCoordX, (int16_t) gTex_STATUS.texPageCoordY, 256, 256 };
+        LIBGPU_SetDrawMode(drawModePrim, false, false, gTex_STATUS.texPageId, &texWindow);
+        I_AddPrim(drawModePrim);
+    }
+
+    // PsyDoom: how much to adjust for widescreen; only the Vulkan renderer does anything here
+    int32_t widescreenAdjust = 0;
+
+    #if PSYDOOM_VULKAN_RENDERER
+        if (Video::isUsingVulkanRenderPath() && Config::gbVulkanWidescreenEnabled) {
+            const float xPadding = (VRenderer::gPsxCoordsFbX / VRenderer::gPsxCoordsFbW) * (float) SCREEN_W;
+            widescreenAdjust = (int32_t) -xPadding;
+        }
+    #endif
+
+    // Compute the kill, secret and item counts.
+    // In co-op games make this a joint count so that both players can see progress towards overall map completion.
+    uint32_t jointKillCount = player.killcount;
+    uint32_t jointSecretCount = player.secretcount;
+    uint32_t jointItemCount = player.itemcount;
+
+    if (gNetGame != gt_single) {
+        const player_t& otherPlayer = (gCurPlayerIndex == 0) ? gPlayers[1] : gPlayers[0];
+        jointKillCount += otherPlayer.killcount;
+        jointSecretCount += otherPlayer.secretcount;
+        jointItemCount += otherPlayer.itemcount;
+    }
+
+    if (gNetGame != gt_deathmatch) {
+        ST_DrawRightAlignedStat(2 + widescreenAdjust, 2, 'K', jointKillCount, gTotalKills);
+
+        if (PlayerPrefs::gStatDisplayMode >= StatDisplayMode::KillsAndSecrets) {
+            ST_DrawRightAlignedStat(2 + widescreenAdjust, 10, 'S', jointSecretCount, gTotalSecret);
+        }
+
+        if (PlayerPrefs::gStatDisplayMode >= StatDisplayMode::KillsSecretsAndItems) {
+            ST_DrawRightAlignedStat(2 + widescreenAdjust, 18, 'I', jointItemCount, gTotalItems);
+        }
+    } else {
+        ST_DrawRightAlignedStat(2 + widescreenAdjust, 2, 'F', gPlayers[gCurPlayerIndex].frags, gPlayers[gCurPlayerIndex ^ 1].frags);
+    }
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -381,22 +439,8 @@ void ST_Drawer() noexcept {
     const uint16_t uiPaletteClutId = Game::getTexClut_STATUS();
     spritePrim.clut = uiPaletteClutId;
 
-    // PsyDoom: how much to adjust the coordinates of strings to properly left or right align them in widescreen mode (Vulkan renderer only)
-    #if PSYDOOM_MODS
-        int32_t widescreenAdjust = 0;
-
-        #if PSYDOOM_VULKAN_RENDERER
-            if (Video::isUsingVulkanRenderPath() && Config::gbVulkanWidescreenEnabled) {
-                // Compute the extra space/padding at the left and right sides of the screen (in PSX coords) due to widescreen.
-                // This is the same calculation used by the Vulkan renderer in 'VDrawing::computeTransformMatrixForUI'.
-                // Note: need to invert the adjustment for 'ST_DrawRightAlignedStat' since the margin is subtracted.
-                const float xPadding = (VRenderer::gPsxCoordsFbX / VRenderer::gPsxCoordsFbW) * (float) SCREEN_W;
-                widescreenAdjust = (int32_t) -xPadding;
-            }
-        #endif
-    #else
-        const int32_t widescreenAdjust = 0;
-    #endif
+    // Note: the widescreen adjustment that used to be worked out here went with the level stats, which were the only
+    // thing using it, into 'ST_DrawLevelStats'.
 
     // Draw the current status bar message, or the map name (if in the automap)
     player_t& player = gPlayers[gCurPlayerIndex];
@@ -422,7 +466,7 @@ void ST_Drawer() noexcept {
 
             // PsyDoom: use 'snprintf' just to be safe here
             #if PSYDOOM_MODS
-                std::snprintf(drawStr, C_ARRAY_SIZE(drawStr), MAP_TITLE_FMT, gGameMap, Game::getMapName(gGameMap).c_str().data());
+                std::snprintf(drawStr, C_ARRAY_SIZE(drawStr), MAP_TITLE_FMT, static_cast<int>(gGameMap), Game::getMapName(gGameMap).c_str().data());
             #else
                 std::sprintf(drawStr, MAP_TITLE_FMT, gGameMap, gMapNames[gGameMap - 1]);
             #endif
@@ -443,7 +487,7 @@ void ST_Drawer() noexcept {
                 else {
                     // No fit, split the render up into two lines and center the text.
                     // First draw the level number:
-                    std::snprintf(drawStr, C_ARRAY_SIZE(drawStr), "LEVEL %d", gGameMap);
+                    std::snprintf(drawStr, C_ARRAY_SIZE(drawStr), "LEVEL %d", static_cast<int>(gGameMap));
                     drawStrParams.xAnchorMode = DrawStringAnchorMode::CENTER;
                     I_DrawStringEx(SCREEN_W / 2, 185, drawStrParams, drawStr);
 
@@ -618,45 +662,32 @@ void ST_Drawer() noexcept {
         I_AddPrim(spritePrim);
     }
 
-    // PsyDoom: draw level stats if enabled, or frags if playing deathmatch:
-    #if PSYDOOM_MODS
-        const bool bShowStats = (PlayerPrefs::gStatDisplayMode >= StatDisplayMode::Kills);
-
-        if (bShowStats) {
-            // Compute the kill, secret and item counts.
-            // In co-op games make this a joint count so that both players can see progress towards overall map completion.
-            // Note: at the end of a map in co-op players will get an opportunity to see individual counts.
-            uint32_t jointKillCount = player.killcount;
-            uint32_t jointSecretCount = player.secretcount;
-            uint32_t jointItemCount = player.itemcount;
-
-            if (gNetGame != gt_single) {
-                const player_t& otherPlayer = (gCurPlayerIndex == 0) ? gPlayers[1] : gPlayers[0];
-
-                jointKillCount += otherPlayer.killcount;
-                jointSecretCount += otherPlayer.secretcount;
-                jointItemCount += otherPlayer.itemcount;
-            }
-
-            // Show the stats!
-            if (gNetGame != gt_deathmatch) {
-                ST_DrawRightAlignedStat(2 + widescreenAdjust, 2, 'K', jointKillCount, gTotalKills);
-
-                if (PlayerPrefs::gStatDisplayMode >= StatDisplayMode::KillsAndSecrets) {
-                    ST_DrawRightAlignedStat(2 + widescreenAdjust, 10, 'S', jointSecretCount, gTotalSecret);
-                }
-
-                if (PlayerPrefs::gStatDisplayMode >= StatDisplayMode::KillsSecretsAndItems) {
-                    ST_DrawRightAlignedStat(2 + widescreenAdjust, 18, 'I', jointItemCount, gTotalItems);
-                }
-            } else {
-                // Show frags for deathmatch
-                ST_DrawRightAlignedStat(2 + widescreenAdjust, 2, 'F', gPlayers[gCurPlayerIndex].frags, gPlayers[gCurPlayerIndex ^ 1].frags);
-            }
+    // PsyDoom: draw the level stats.
+    //
+    // PsyDoom 3DS: unless the status bar has moved to the touch screen, in which case everything here happens after
+    // the top screen has already been banked, and anything drawn now would only ever reach the touch screen. The stats
+    // belong over the 3D view, so 'P_Drawer' draws them itself before banking it.
+    // PsyDoom 3DS: with the status bar on the touch screen, everything here happens after the top screen has been
+    // banked, so anything drawn now would only ever reach the touch screen. These belong over the 3D view, so in that
+    // case 'P_Drawer' draws them itself beforehand.
+    #if PSYDOOM_3DS
+        if (PlayerPrefs::gStatusBarPos == PlayerPrefs::STATUS_BAR_TOP_SCREEN) {
+            ST_DrawViewOverlays();
         }
-    #endif  // #if PSYDOOM_MODS
+    #else
+        ST_DrawViewOverlays();
+    #endif
+}
 
-    // Draw the paused overlay, level warp and vram viewer
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom: everything that is drawn over the 3D view rather than as part of the status bar: the level stats, and the
+// paused plaque with the level warp and VRAM viewer that go with it.
+//
+// Grouped together because they share a requirement: they have to be drawn while the 3D view is still being composed.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void ST_DrawViewOverlays() noexcept {
+    ST_DrawLevelStats();
+
     if (gbGamePaused) {
         I_DrawPausedOverlay();
     }
@@ -673,3 +704,4 @@ void ST_AlertMessage(const char* const msg, const uint32_t numTics) noexcept {
     gStatusBar.alertMessageTicsLeft = numTics;
 }
 #endif  // #if PSYDOOM_MODS
+

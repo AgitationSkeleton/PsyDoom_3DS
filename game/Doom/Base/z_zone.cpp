@@ -5,8 +5,11 @@
 #include "i_main.h"
 #include "PsyDoom/Config/Config.h"
 
+#include "FatalErrors.h"
+
 #include <cstring>
 #include <memory>
+#include <new>
 
 // The minimum size that a memory block must be
 static constexpr int32_t MINFRAGMENT = 64;
@@ -34,7 +37,18 @@ void Z_Init() noexcept {
         const int32_t heapSize = Z_HEAP_SIZE;
     #endif
 
-    gZoneHeap.reset(new std::byte[heapSize]);                   // Allocate the native heap for the application
+    // Note: asking for this without exceptions on purpose. A throwing 'new' here would end the process through
+    // 'std::terminate' without going anywhere near the fatal error handler, which on a console means vanishing with no
+    // message and no crash dump. Checking the result means the player is told what happened instead.
+    gZoneHeap.reset(new (std::nothrow) std::byte[heapSize]);
+
+    if (!gZoneHeap) {
+        FatalErrors::raiseF(
+            "Failed to allocate the %d MiB zone heap that the game runs from - out of memory!",
+            (int)(heapSize / (1024 * 1024))
+        );
+    }
+
     gpMainMemZone = Z_InitZone(gZoneHeap.get(), heapSize);      // Setup and save the main memory zone (the only zone)
 }
 

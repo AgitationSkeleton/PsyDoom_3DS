@@ -37,7 +37,13 @@
   This correction is applied to axis values
   so they fit better in SDL's value range.
 */
-#define CORRECT_AXIS_X(X) ((X * SDL_JOYSTICK_AXIS_MAX) / 160)
+#define SCALE_AXIS(X) (((int)(X) * SDL_JOYSTICK_AXIS_MAX) / 160)
+
+/* Circle Pad hardware varies between units and can report past +/-160, which overflows a Sint16
+   once scaled and flips the reported direction. Clamp so a hard push always reads as full deflection. */
+#define CORRECT_AXIS_X(X) ((Sint16)(SCALE_AXIS(X) > SDL_JOYSTICK_AXIS_MAX  ? SDL_JOYSTICK_AXIS_MAX : \
+                                   (SCALE_AXIS(X) < SDL_JOYSTICK_AXIS_MIN  ? SDL_JOYSTICK_AXIS_MIN : \
+                                    SCALE_AXIS(X))))
 
 /*
   The Y axis needs to be flipped because SDL's "up"
@@ -102,6 +108,10 @@ N3DS_JoystickSetSensorsEnabled(SDL_Joystick *joystick, SDL_bool enabled)
 static void
 N3DS_JoystickUpdate(SDL_Joystick *joystick)
 {
+    /* Note: do NOT call 'hidScanInput' here!
+       The video driver's 'N3DS_PumpEvents' already latches HID state once per pump, and SDL always pumps video
+       events immediately before updating joysticks. A second scan in the same pump makes 'hidKeysDown' and
+       'hidKeysUp' report nothing at all, which silently swallows every button press. */
     UpdateN3DSPressedButtons(joystick);
     UpdateN3DSReleasedButtons(joystick);
     UpdateN3DSCircle(joystick);

@@ -1,4 +1,4 @@
-#include "cdmaptbl.h"
+﻿#include "cdmaptbl.h"
 
 #if PSYDOOM_MODS
 
@@ -60,8 +60,8 @@ static void CdMapTbl_Init_GEC_ME_Beta3() noexcept {
 
     // Define demo lumps
     const auto defineDemoLump = [&](const int32_t srcNum, const int32_t dstNum) noexcept {
-        std::snprintf(srcFileName, C_ARRAY_SIZE(srcFileName), "PSXDOOM/ABIN/DEMO%d.LMP", srcNum);
-        std::snprintf(dstFileName, C_ARRAY_SIZE(dstFileName), "DEMO%d.LMP", dstNum);
+        std::snprintf(srcFileName, C_ARRAY_SIZE(srcFileName), "PSXDOOM/ABIN/DEMO%d.LMP", static_cast<int>(srcNum));
+        std::snprintf(dstFileName, C_ARRAY_SIZE(dstFileName), "DEMO%d.LMP", static_cast<int>(dstNum));
         AddDiscFile(dstFileName, srcFileName);
     };
 
@@ -74,13 +74,13 @@ static void CdMapTbl_Init_GEC_ME_Beta3() noexcept {
         const int32_t srcSubDirNum = (srcNum - 1) / 8;
 
         // Define the .WAD file
-        std::snprintf(srcFileName, C_ARRAY_SIZE(srcFileName), "%s/MAPDIR%d/MAP%02d.%s", srcBaseDir, srcSubDirNum, srcNum, srcFmt);
-        std::snprintf(dstFileName, C_ARRAY_SIZE(dstFileName), "MAP%02d.%s", dstNum, srcFmt);
+        std::snprintf(srcFileName, C_ARRAY_SIZE(srcFileName), "%s/MAPDIR%d/MAP%02d.%s", srcBaseDir, static_cast<int>(srcSubDirNum), static_cast<int>(srcNum), srcFmt);
+        std::snprintf(dstFileName, C_ARRAY_SIZE(dstFileName), "MAP%02d.%s", static_cast<int>(dstNum), srcFmt);
         AddDiscFile(dstFileName, srcFileName);
 
         // Define the .LCD file
-        std::snprintf(srcFileName, C_ARRAY_SIZE(srcFileName), "%s/SNDMAPS/MAP%02d.LCD", srcBaseDir, srcNum);
-        std::snprintf(dstFileName, C_ARRAY_SIZE(dstFileName), "MAP%02d.LCD", dstNum);
+        std::snprintf(srcFileName, C_ARRAY_SIZE(srcFileName), "%s/SNDMAPS/MAP%02d.LCD", srcBaseDir, static_cast<int>(srcNum));
+        std::snprintf(dstFileName, C_ARRAY_SIZE(dstFileName), "MAP%02d.LCD", static_cast<int>(dstNum));
         AddDiscFile(dstFileName, srcFileName);
     };
 
@@ -105,8 +105,8 @@ static void CdMapTbl_Init_GEC_ME_Beta3() noexcept {
     AddDiscFile("DOOMSND.WMD", "PSXDOOM/MUSIC/DOOMSNDF.WMD");
 
     for (int32_t musicNum = 1; musicNum <= 30; ++musicNum) {
-        std::snprintf(srcFileName, C_ARRAY_SIZE(srcFileName), "PSXDOOM/MUSIC/MUSLEV%d.LCD", musicNum);
-        std::snprintf(dstFileName, C_ARRAY_SIZE(dstFileName), "MUSLEV%d.LCD", musicNum);
+        std::snprintf(srcFileName, C_ARRAY_SIZE(srcFileName), "PSXDOOM/MUSIC/MUSLEV%d.LCD", static_cast<int>(musicNum));
+        std::snprintf(dstFileName, C_ARRAY_SIZE(dstFileName), "MUSLEV%d.LCD", static_cast<int>(musicNum));
         AddDiscFile(dstFileName, srcFileName);
     }
 }
@@ -174,3 +174,4 @@ PsxCd_MapTblEntry CdMapTbl_GetEntry(const CdFileId fileId) noexcept {
 }
 
 #endif  // #if PSYDOOM_MODS
+

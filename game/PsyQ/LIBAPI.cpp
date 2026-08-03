@@ -53,8 +53,8 @@ void PsxVm::generateTimerEvents() noexcept {
         return;
 
     // Generate one event per every single interval passed up to a certain max (skip the rest).
-    const int32_t numEvents = std::max((int32_t)(elapsedSecs / gRootCnt2.interruptIntervalSecs), 1);
-    const int32_t numEventsToFire = std::min(numEvents, 16);
+    const int32_t numEvents = std::max<int32_t>((int32_t)(elapsedSecs / gRootCnt2.interruptIntervalSecs), 1);
+    const int32_t numEventsToFire = std::min<int32_t>(numEvents, 16);
 
     // Figure out how far we are towards the next event
     const double spilloverSecs = std::fmod(elapsedSecs, gRootCnt2.interruptIntervalSecs);

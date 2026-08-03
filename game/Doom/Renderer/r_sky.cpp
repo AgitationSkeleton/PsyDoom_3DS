@@ -45,12 +45,12 @@ static void R_AddFrontFacingInfiniteSkyWall(const leafedge_t& edge, const fixed_
 
         if (bUpperSkyWall) {
             // Completely offscreen at the top?
-            if ((v1y < -HALF_VIEW_3D_H) && (v2y < -HALF_VIEW_3D_H))
+            if ((v1y < -gHalfViewHeight) && (v2y < -gHalfViewHeight))
                 return;
         }
         else {
             // Completely offscreen at the bottom?
-            if ((v1y >= HALF_VIEW_3D_H) && (v2y >= HALF_VIEW_3D_H))
+            if ((v1y >= gHalfViewHeight) && (v2y >= gHalfViewHeight))
                 return;
         }
     }
@@ -89,7 +89,7 @@ static void R_AddFrontFacingInfiniteSkyWall(const leafedge_t& edge, const fixed_
     const fixed_t yStep = dy / dx;
 
     // Compute the start y value and bring into screenspace
-    fixed_t yCur_frac = iviewZ * vert1.scale + HALF_VIEW_3D_H * FRACUNIT;
+    fixed_t yCur_frac = iviewZ * vert1.scale + gHalfViewHeight * FRACUNIT;
 
     // Adjust the starting column if the beginning of the seg is obscured: skip past the not visible columns
     const seg_t& seg = *edge.seg;
@@ -116,7 +116,7 @@ static void R_AddFrontFacingInfiniteSkyWall(const leafedge_t& edge, const fixed_
                 // Set the location and height of the column to draw.
                 // Clip the height so it doesn't exceed the height of the sky texture also.
                 drawPrim.x0 = (int16_t) xCur;
-                drawPrim.h = (int16_t) std::min(yCur + 1, (int32_t) skyTex.height);
+                drawPrim.h = (int16_t) std::min<int32_t>(yCur + 1, (int32_t) skyTex.height);
 
                 // Set the 'U' texture coordinate for the column and submit
                 drawPrim.u0 = (LibGpuUV)((xCur + uOffset) & uWrapMask);

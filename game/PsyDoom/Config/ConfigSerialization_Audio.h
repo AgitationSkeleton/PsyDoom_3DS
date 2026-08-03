@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ConfigSerialization.h"
 
@@ -11,7 +11,9 @@ BEGIN_NAMESPACE(ConfigSerialization)
 // N.B: must ONLY contain 'ConfigField' entries!
 struct Config_Audio {
     ConfigField     audioBufferSize;
+#if !PSYDOOM_3DS
     ConfigField     spuRamSize;
+#endif
 
     inline ConfigFieldList getFieldList() noexcept {
         static_assert(sizeof(*this) % sizeof(ConfigField) == 0);
@@ -24,3 +26,4 @@ extern Config_Audio gConfig_Audio;
 void initCfgSerialization_Audio() noexcept;
 
 END_NAMESPACE(ConfigSerialization)
+

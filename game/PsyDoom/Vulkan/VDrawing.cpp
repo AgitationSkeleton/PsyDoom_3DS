@@ -272,14 +272,14 @@ Matrix4f computeTransformMatrixFor3D(const float viewX, const float viewY, const
     // Projection parameters.
     // Project as if we still had the old 256x200 3D viewport and off center to account for the status bar at the bottom.
     // This matches the projection that the original PSX Doom used, with allowance for widescreen:
-    constexpr float STATUS_BAR_H = SCREEN_H - VIEW_3D_H;
+    constexpr float STATUS_BAR_H = SCREEN_H - gViewHeight;
 
     const bool bAllowWidescreen = Config::gbVulkanWidescreenEnabled;
     const float widescreenScale = std::max((float) VRenderer::gFramebufferW / (float) VRenderer::gPsxCoordsFbW, 1.0f);
     const float viewLx = (bAllowWidescreen) ? -widescreenScale : -1.0f;
     const float viewRx = (bAllowWidescreen) ? +widescreenScale : +1.0f;
-    const float viewTy = (HALF_VIEW_3D_H - (float) Video::gTopOverscan) / (float) HALF_SCREEN_W;
-    const float viewBy = (-HALF_VIEW_3D_H - STATUS_BAR_H + (float) Video::gBotOverscan) / (float) HALF_SCREEN_W;
+    const float viewTy = (gHalfViewHeight - (float) Video::gTopOverscan) / (float) HALF_SCREEN_W;
+    const float viewBy = (-gHalfViewHeight - STATUS_BAR_H + (float) Video::gBotOverscan) / (float) HALF_SCREEN_W;
     const float zNear = 1.0f;
     const float zFar = 65536.0f;
 

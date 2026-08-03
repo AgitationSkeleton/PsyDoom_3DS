@@ -20,7 +20,7 @@ static fixed_t decodeAnalogMoveAmount(const uint8_t amt8) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 static uint8_t encodeAnalogMoveAmount(const fixed_t amt) noexcept {
     const bool bNegative = (amt < 0);
-    const fixed_t absClampedAmount = std::min(std::abs(amt), 0x10000);      // Make positive and clamp to 0-1
+    const fixed_t absClampedAmount = std::min<fixed_t>(std::abs(amt), 0x10000);      // Make positive and clamp to 0-1
     const uint8_t amt7 = (uint8_t)((absClampedAmount * 127) >> 16);         // Convert from 0-127
     return (bNegative) ? amt7 | 0x80u : amt7;                               // Add the sign bit
 }

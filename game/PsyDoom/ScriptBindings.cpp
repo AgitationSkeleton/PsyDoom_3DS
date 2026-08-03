@@ -563,10 +563,10 @@ static void ForEachMobjInArea(
     const int32_t bmapW = gBlockmapWidth;
     const int32_t bmapH = gBlockmapHeight;
 
-    const int32_t bmapTy = std::min(d_rshift<MAPBLOCKSHIFT>(ymax - gBlockmapOriginY), bmapH - 1);
-    const int32_t bmapBy = std::max(d_rshift<MAPBLOCKSHIFT>(ymin - gBlockmapOriginY), 0);
-    const int32_t bmapLx = std::max(d_rshift<MAPBLOCKSHIFT>(xmin - gBlockmapOriginX), 0);
-    const int32_t bmapRx = std::min(d_rshift<MAPBLOCKSHIFT>(xmax - gBlockmapOriginX), bmapW - 1);
+    const int32_t bmapTy = std::min<int32_t>(d_rshift<MAPBLOCKSHIFT>(ymax - gBlockmapOriginY), bmapH - 1);
+    const int32_t bmapBy = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(ymin - gBlockmapOriginY), 0);
+    const int32_t bmapLx = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(xmin - gBlockmapOriginX), 0);
+    const int32_t bmapRx = std::min<int32_t>(d_rshift<MAPBLOCKSHIFT>(xmax - gBlockmapOriginX), bmapW - 1);
 
     // Go through all of the blockmap cells of interest, calling the callback on each thing found
     for (int32_t bmapY = bmapBy; bmapY <= bmapTy; ++bmapY) {
@@ -767,7 +767,7 @@ void S_PlaySoundAtPosition(const float x, const float y, const uint32_t soundId)
 #define SOL_BYTE_PROPERTY(TypeName, FieldName)\
     sol::property(\
         [](const TypeName& obj) noexcept -> int32_t { return obj.FieldName; },\
-        [](TypeName& obj, const int32_t value) noexcept { obj.FieldName = (uint8_t) std::clamp(value, 0, 255); }\
+        [](TypeName& obj, const int32_t value) noexcept { obj.FieldName = (uint8_t) std::clamp<int32_t>(value, 0, 255); }\
     )
 
 // Register a fixed property which is interpolated if sector interpolation is enabled

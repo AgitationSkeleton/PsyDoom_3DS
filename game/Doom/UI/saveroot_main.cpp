@@ -16,7 +16,11 @@
 #include "Doom/Renderer/r_data.h"
 #include "loadsave_main.h"
 #include "m_main.h"
+#if PSYDOOM_3DS
+    #include "menu3ds.h"
+#endif
 #include "o_main.h"
+#include "Doom/Base/i_texcache.h"
 #include "PsyDoom/Game.h"
 #include "PsyDoom/Utils.h"
 #include "pw_main.h"
@@ -77,6 +81,11 @@ static void DrawCursor(const int16_t cursorX, const int16_t cursorY) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 void SaveRoot_Init() noexcept {
     S_StartSound(nullptr, sfx_pistol);
+
+    // PsyDoom: cache the background here too, so this screen does not depend on how it was reached
+    #if PSYDOOM_MODS
+        I_LoadAndCacheTexLump(gTex_OptionsBg, Game::getTexLumpName_OptionsBg());
+    #endif
 
     // Initialize cursor position and vblanks until move
     gCursorFrame = 0;
@@ -217,10 +226,17 @@ void SaveRoot_Draw() noexcept {
     // Increment the frame count for the texture cache and draw the background
     I_IncDrawnFrameCount();
     Utils::onBeginUIDrawing();
+    // PsyDoom 3DS: the title goes on the top screen, on a background of its own
+    #if PSYDOOM_3DS
+        Menu3DS_DrawTitleScreen(gTex_OptionsBg, Game::getTexClut_OptionsBg(), "Load And Save");
+    #endif
+
     O_DrawBackground(gTex_OptionsBg, Game::getTexClut_OptionsBg(), 128, 128, 128);
 
     // Draw the menu title
-    I_DrawString(-1, 20, "Load And Save");
+    #if !PSYDOOM_3DS
+        I_DrawString(-1, 20, "Load And Save");
+    #endif
 
     // Draw all the menu items
     for (int32_t i = 0; i < gMenuSize; ++i) {

@@ -16,6 +16,11 @@
 #include "PsyDoom/PlayerPrefs.h"
 #include "PsyDoom/PsxPadButtons.h"
 #include "PsyDoom/Utils.h"
+
+#if PSYDOOM_3DS
+    #include "menu3ds.h"
+    #include "PsyDoom/Screens3DS.h"
+#endif
 #include "PsyDoom/Video.h"
 #include "PsyDoom/Vulkan/VRenderer.h"
 #include "saveroot_main.h"
@@ -82,6 +87,18 @@ static const menuitem_t gOptMenuItems_MainMenu[] = {
     { opt_main_menu,        62, 195 },
 };
 
+// PsyDoom 3DS: the touch screen only presents rows 24 to 216 of the framebuffer, and the title has moved to the top
+// screen, so the in game layout is pulled up to fit inside that band. 'Restart Level' would otherwise be cut off.
+#if PSYDOOM_3DS
+static const menuitem_t gOptMenuItems_Single[] = {
+    { opt_music,            62, 42  },
+    { opt_sound,            62, 82  },
+    { opt_load_save,        62, 122 },
+    { opt_extra_options,    62, 147 },
+    { opt_main_menu,        62, 172 },
+    { opt_restart,          62, 197 },
+};
+#else
 static const menuitem_t gOptMenuItems_Single[] = {
     { opt_music,            62, 50  },
     { opt_sound,            62, 90  },
@@ -97,6 +114,7 @@ static const menuitem_t gOptMenuItems_Single[] = {
     { opt_main_menu,        62, 180 },
     { opt_restart,          62, 205 },
 };
+#endif
 
 static const menuitem_t gOptMenuItems_NetGame[] = {
     { opt_music,        62, 70  },
@@ -126,6 +144,15 @@ int32_t gOptionsMusVol = S_MUS_DEFAULT_VOL;
 //------------------------------------------------------------------------------------------------------------------------------------------
 void O_Init() noexcept {
     S_StartSound(nullptr, sfx_pistol);      // Bam!
+
+    // PsyDoom: make sure this menu's background is loaded.
+    //
+    // It is normally loaded once by the title screen, which leaves the options and pause menus with a black background
+    // if they are ever reached without passing through it - warping straight to a map, for instance. Loading it here
+    // as well makes this menu, and the password and save menus it leads to, independent of how they were reached.
+    #if PSYDOOM_MODS
+        I_LoadAndCacheTexLump(gTex_OptionsBg, Game::getTexLumpName_OptionsBg());
+    #endif
 
     // PsyDoom: initially assume we don't unpause the game after the options menu is done
     #if PSYDOOM_MODS
@@ -197,12 +224,33 @@ gameaction_t O_Control() noexcept {
 
             const bool bMenuStart = (inputs.fMenuStart() && (!oldInputs.fMenuStart()));
             const bool bMenuBack = (inputs.fMenuBack() && (!oldInputs.fMenuBack()));
-            const bool bMenuOk = (inputs.fMenuOk() && (!oldInputs.fMenuOk()));
+            bool bMenuOk = (inputs.fMenuOk() && (!oldInputs.fMenuOk()));
             const bool bMenuUp = inputs.fMenuUp();
             const bool bMenuDown = inputs.fMenuDown();
             const bool bMenuLeft = inputs.fMenuLeft();
-            const bool bMenuRight = inputs.fMenuRight();
-            const bool bMenuMove = (bMenuUp || bMenuDown || bMenuLeft || bMenuRight);
+            bool bMenuRight = inputs.fMenuRight();
+            bool bMenuMove = (bMenuUp || bMenuDown || bMenuLeft || bMenuRight);
+
+            // PsyDoom 3DS: tapping a row selects it; tapping the selected row acts on it. The two volume rows are
+            // sliders, so a tap on those nudges the value up rather than entering anything.
+            #if PSYDOOM_3DS
+                if (playerIdx == gCurPlayerIndex) {
+                    const int32_t tappedItem = Screens3DS::consumeTappedItem();
+
+                    if (tappedItem >= 0) {
+                        if (gCursorPos[playerIdx] != tappedItem) {
+                            gCursorPos[playerIdx] = tappedItem;
+                            S_StartSound(nullptr, sfx_pstop);
+                        } else if (gpOptionsMenuItems[tappedItem].option <= opt_sound) {
+                            bMenuRight = true;
+                            bMenuMove = true;
+                            gVBlanksUntilMenuMove[playerIdx] = 0;
+                        } else {
+                            bMenuOk = true;
+                        }
+                    }
+                }
+            #endif
         #else
             const padbuttons_t ticButtons = gTicButtons[playerIdx];
             const padbuttons_t oldTicButtons = gOldTicButtons[playerIdx];
@@ -427,13 +475,20 @@ void O_Drawer() noexcept {
         Utils::onBeginUIDrawing();  // PsyDoom: UI drawing setup for the new Vulkan renderer
     #endif
 
+    // PsyDoom 3DS: the top screen is composed separately, with the background and the title only
+    #if PSYDOOM_3DS
+        Menu3DS_DrawTitleScreen(gTex_OptionsBg, Game::getTexClut_OptionsBg(), "Options");
+    #endif
+
     // Draw the options screen background
     O_DrawBackground(gTex_OptionsBg, Game::getTexClut_OptionsBg(), 128, 128, 128);
 
     // Don't do any rendering if we are about to exit the menu
     if (gGameAction == ga_nothing) {
-        // Menu title
-        I_DrawString(-1, 20, "Options");
+        // Menu title: on 3DS this lives on the top screen instead
+        #if !PSYDOOM_3DS
+            I_DrawString(-1, 20, "Options");
+        #endif
 
         // Draw each menu item for the current options screen layout.
         // The available options will vary depending on game mode.
@@ -442,6 +497,11 @@ void O_Drawer() noexcept {
         for (int32_t optIdx = 0; optIdx < gOptionsMenuSize; ++optIdx, ++pMenuItem) {
             // Draw the option label
             I_DrawString(pMenuItem->x, pMenuItem->y, gOptionNames[pMenuItem->option]);
+
+            // PsyDoom 3DS: make the row touchable; the volume rows also cover the slider drawn beneath the label
+            #if PSYDOOM_3DS
+                Screens3DS::addTouchItem(optIdx, pMenuItem->y - 4, (pMenuItem->option <= opt_sound) ? 36 : 22);
+            #endif
 
             // If the option has a slider associated with it, draw that too
             if (pMenuItem->option <= opt_sound) {
@@ -565,15 +625,17 @@ void O_DrawBackground(
 
         // Support widescreen if widescreen options menu tiling is enabled.
         // This allows user mods or new game types to implement menus that fully support widescreen.
+        #if PSYDOOM_VULKAN_RENDERER
         if (Video::isUsingVulkanRenderPath() && Config::gbVulkanWidescreenEnabled && MapInfo::getGameInfo().bAllowWideOptionsBg) {
             const int32_t extraSpaceAtSides = (int32_t) std::max(std::floor(VRenderer::gPsxCoordsFbX), 0.0f);
             const int32_t numExtraTilesAtSides = (extraSpaceAtSides + tileW - 1) / tileW;
             numTilesX += numExtraTilesAtSides * 2;
         }
+        #endif
 
         // Don't let this get too out of hand!
-        numTilesX = std::min(numTilesX, 64);
-        numTilesY = std::min(numTilesX, 16);
+        numTilesX = std::min<int32_t>(numTilesX, 64);
+        numTilesY = std::min<int32_t>(numTilesX, 16);
 
         // Figure out the x position to center all these tiles
         const int32_t startX = (SCREEN_W - numTilesX * tileW) / 2;

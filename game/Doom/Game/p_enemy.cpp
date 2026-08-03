@@ -188,7 +188,7 @@ bool P_CheckMissileRange(mobj_t& attacker) noexcept {
 
     // Cap the distance so there is always at least some chance of firing and decide randomly whether to fire.
     // The closer the target is the more likely we will fire:
-    dist = std::min(dist, 200);
+    dist = std::min<int32_t>(dist, 200);
     return (dist <= P_Random());
 }
 
@@ -906,7 +906,7 @@ void A_Tracer(mobj_t& actor) noexcept {
 
     mobj_t& smoke = *P_SpawnMobj(actor.x - actor.momx, actor.y - actor.momy, actor.z, MT_SMOKE);
     smoke.momz = FRACUNIT;
-    smoke.tics = std::max(smoke.tics - (P_Random() & 3), 1);
+    smoke.tics = std::max<int32_t>(smoke.tics - (P_Random() & 3), 1);
 
     // Only follow the target and change course if it's still alive
     mobj_t* const pTarget = actor.tracer;
@@ -942,7 +942,7 @@ void A_Tracer(mobj_t& actor) noexcept {
 
     // Figure out how long it will take to reach the target
     const fixed_t distToTgt = P_AproxDistance(pTarget->x - actor.x, pTarget->y - actor.y);
-    const int32_t travelTics = std::max(distToTgt / actor.info->speed, 1);
+    const int32_t travelTics = std::max<int32_t>(distToTgt / actor.info->speed, 1);
 
     // Figure out the desired z velocity to fly in a straight line to the target.
     // Note: with the '-40.0' adjustment we make the missile aim for the target 40.0 units above it's floor position.
@@ -1109,7 +1109,7 @@ void A_SkullAttack(mobj_t& actor) noexcept {
 
     // Figure out the z velocity based on the travel time and z delta to the target
     const fixed_t distToTgt = P_AproxDistance(pTarget->x - actor.x, pTarget->y - actor.y);
-    const int32_t travelTime = std::max(distToTgt / SKULLSPEED, 1);
+    const int32_t travelTime = std::max<int32_t>(distToTgt / SKULLSPEED, 1);
     const fixed_t zDelta = pTarget->z + d_rshift<1>(pTarget->height) - actor.z;
 
     actor.momz = zDelta / travelTime;
@@ -1537,10 +1537,10 @@ void A_VileChase(mobj_t& actor) noexcept {
         gVileTryY = actor.y + actor.info->speed * gMoveYSpeed[actor.movedir];
 
         // Determine the blockmap extents (left/right, top/bottom) to be checked (for corpses) and clamp to a valid range
-        const int32_t bmapLx = std::max(d_rshift<MAPBLOCKSHIFT>(gVileTryX - gBlockmapOriginX - MAXRADIUS * 2), 0);
+        const int32_t bmapLx = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(gVileTryX - gBlockmapOriginX - MAXRADIUS * 2), 0);
         const int32_t bmapRx = std::min(d_rshift<MAPBLOCKSHIFT>(gVileTryX - gBlockmapOriginX + MAXRADIUS * 2), gBlockmapWidth - 1);
         const int32_t bmapTy = std::min(d_rshift<MAPBLOCKSHIFT>(gVileTryY - gBlockmapOriginY + MAXRADIUS * 2), gBlockmapHeight - 1);
-        const int32_t bmapBy = std::max(d_rshift<MAPBLOCKSHIFT>(gVileTryY - gBlockmapOriginY - MAXRADIUS * 2), 0);
+        const int32_t bmapBy = std::max<int32_t>(d_rshift<MAPBLOCKSHIFT>(gVileTryY - gBlockmapOriginY - MAXRADIUS * 2), 0);
 
         // Search nearby blockmap cells for raisable corpses
         for (int32_t blockX = bmapLx; blockX <= bmapRx; ++blockX) {
@@ -1756,7 +1756,7 @@ void A_BrainScream(mobj_t& actor) noexcept {
 
         // Randomize duration
         explosion.tics -= P_Random() & 7;
-        explosion.tics = std::max(explosion.tics, 1);
+        explosion.tics = std::max<int32_t>(explosion.tics, 1);
     }
 
     // Play the Icon Of Sin death sound
@@ -1780,7 +1780,7 @@ void A_BrainExplode(mobj_t& actor) noexcept {
 
     // Randomize duration
     explosion.tics -= P_Random() & 7;
-    explosion.tics = std::max(explosion.tics, 1);
+    explosion.tics = std::max<int32_t>(explosion.tics, 1);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

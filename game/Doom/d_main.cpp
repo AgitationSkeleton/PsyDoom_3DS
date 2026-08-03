@@ -43,6 +43,10 @@
 #include "UI/st_main.h"
 #include "UI/ti_main.h"
 
+#if PSYDOOM_3DS
+    #include "Platform_3DS.h"
+#endif
+
 #if PSYDOOM_VULKAN_RENDERER
     #include "PsyDoom/Vulkan/VRenderer.h"
 #endif
@@ -174,7 +178,9 @@ static void D_PlayIntros() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 void D_DoomMain() noexcept {
     // PlayStation specific setup
+    PSYDOOM_3DS_LOG("D_DoomMain: %s", Platform3DS::memoryStatusString());
     I_PSXInit();
+    PSYDOOM_3DS_LOG("D_DoomMain: PlayStation hardware initialized");
 
     // Sound init:
     #if PSYDOOM_MODS
@@ -193,11 +199,18 @@ void D_DoomMain() noexcept {
         PsxSoundInit(doomToWessVol(gOptionsSndVol), doomToWessVol(gOptionsMusVol), gTmpBuffer);
     #endif
 
+    PSYDOOM_3DS_LOG("D_DoomMain: sound initialized");
+
     // Initializing standard DOOM subsystems, zone memory management, WAD, platform stuff, renderer etc.
     Z_Init();
+    PSYDOOM_3DS_LOG("D_DoomMain: zone heap allocated, %s", Platform3DS::memoryStatusString());
+
     I_Init();
     W_Init();
+    PSYDOOM_3DS_LOG("D_DoomMain: WAD opened");
+
     R_Init();
+    PSYDOOM_3DS_LOG("D_DoomMain: renderer initialized, %s", Platform3DS::memoryStatusString());
 
     // PsyDoom: build the (now) dynamically generated lists of sprites, map objects, animated textures and switches for the game.
     // User mods can add new entries to any of these lists. Also initialize MAPINFO.
@@ -210,6 +223,7 @@ void D_DoomMain() noexcept {
     #endif
 
     ST_Init();
+    PSYDOOM_3DS_LOG("D_DoomMain: game data loaded, entering the main loop");
 
     #if PSYDOOM_MODS
         // PsyDoom: new cleanup logic before we exit
@@ -787,6 +801,9 @@ gameaction_t MiniLoop(
 
         frametimer_t::time_point profilerStartTime = frameStartTime;        // When we started profiling the current few frames
         uint32_t profilerNumFramesElapsed = 0;                              // How many frames have elapsed for the frame profiler
+        #if defined(PSYDOOM_3DS_BENCHMARK) && PSYDOOM_3DS_BENCHMARK
+            int64_t profilerDrawerUsec = 0;
+        #endif
         gPerfAvgFps = 0;                                                    // Don't know this yet, frame profiler will tell us later!
         gPerfAvgUsec = 0;                                                   // Don't know this yet, frame profiler will tell us later!
     #endif
@@ -1017,7 +1034,15 @@ gameaction_t MiniLoop(
         #endif
 
         // Call the drawer function to do drawing for the frame
+        #if defined(PSYDOOM_3DS_BENCHMARK) && PSYDOOM_3DS_BENCHMARK
+            const frametimer_t::time_point drawerStartTime = frametimer_t::now();
+        #endif
         pDrawer();
+        #if defined(PSYDOOM_3DS_BENCHMARK) && PSYDOOM_3DS_BENCHMARK
+            profilerDrawerUsec += std::chrono::duration_cast<std::chrono::microseconds>(
+                frametimer_t::now() - drawerStartTime
+            ).count();
+        #endif
 
         // Do we need to update sound? (sound updates at 15 Hz)
         // PsyDoom: allow updates at any rate so sounds start as soon as possible.
@@ -1054,8 +1079,38 @@ gameaction_t MiniLoop(
                 gPerfAvgUsec = (float) avgUsec;
                 gPerfAvgFps = (float) avgFps;
 
+                #if defined(PSYDOOM_3DS_BENCHMARK) && PSYDOOM_3DS_BENCHMARK
+                    static std::FILE* pBenchmarkFile = nullptr;
+                    static double benchmarkElapsedSeconds = 0.0;
+                    benchmarkElapsedSeconds += timeSincePerfUpdate;
+
+                    if (!pBenchmarkFile) {
+                        pBenchmarkFile = std::fopen(
+                            "sdmc:/3ds/PsyDoom/" PSYDOOM_3DS_VARIANT_DIR "/perf.csv",
+                            "w"
+                        );
+                        if (pBenchmarkFile) {
+                            std::fputs("elapsed_seconds,fps,frame_usec,drawer_usec\n", pBenchmarkFile);
+                        }
+                    }
+                    if (pBenchmarkFile) {
+                        std::fprintf(
+                            pBenchmarkFile,
+                            "%.3f,%.3f,%.3f,%.3f\n",
+                            benchmarkElapsedSeconds,
+                            avgFps,
+                            avgUsec,
+                            static_cast<double>(profilerDrawerUsec) / profilerNumFramesElapsed
+                        );
+                        std::fflush(pBenchmarkFile);
+                    }
+                #endif
+
                 // Begin a new profiling iteration
                 profilerNumFramesElapsed = 0;
+                #if defined(PSYDOOM_3DS_BENCHMARK) && PSYDOOM_3DS_BENCHMARK
+                    profilerDrawerUsec = 0;
+                #endif
                 profilerStartTime = now;
             }
         #endif

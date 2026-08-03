@@ -456,13 +456,13 @@ void P_TouchSpecialThing(mobj_t& special, mobj_t& toucher) noexcept {
         // Bonus items
         //----------------------------------------------------------------------------------------------------------------------------------
         case SPR_BON1: {
-            player.health = std::min(player.health + 2, 200);
+            player.health = std::min<int32_t>(player.health + 2, 200);
             player.mo->health = player.health;
             player.message = "You pick up a health bonus.";
         }   break;
 
         case SPR_BON2: {
-            player.armorpoints = std::min(player.armorpoints + 2, 200);
+            player.armorpoints = std::min<int32_t>(player.armorpoints + 2, 200);
 
             if (player.armortype == 0) {
                 player.armortype = 1;
@@ -472,7 +472,7 @@ void P_TouchSpecialThing(mobj_t& special, mobj_t& toucher) noexcept {
         }   break;
 
         case SPR_SOUL: {
-            player.health = std::min(player.health + 100, 200);
+            player.health = std::min<int32_t>(player.health + 100, 200);
             player.mo->health = player.health;
             player.message = "Supercharge!";
             soundId = sfx_getpow;
@@ -926,7 +926,7 @@ void P_KillMobj(mobj_t* const pKiller, mobj_t& target) noexcept {
     const statenum_t nextStateNum = (bUseGibState) ? target.info->xdeathstate : target.info->deathstate;
     P_SetMobjState(target, nextStateNum);
 
-    target.tics = std::max(target.tics - (P_Random() & 1), 1);
+    target.tics = std::max<int32_t>(target.tics - (P_Random() & 1), 1);
 
     // Do item dropping for the dead thing
     mobjtype_t dropItemType = {};
@@ -1030,7 +1030,7 @@ void P_DamageMobj(mobj_t& target, mobj_t* const pInflictor, mobj_t* const pSourc
             // This ensures the player will reach the intermission screen once in this sector type, regardless of any damage being taken.
             if (target.subsector->sector->special == 11) {
                 if (damageAmt >= target.health) {
-                    damageAmt = std::max(target.health - 1, 0);
+                    damageAmt = std::max<int32_t>(target.health - 1, 0);
                 }
             }
 
@@ -1107,7 +1107,7 @@ void P_DamageMobj(mobj_t& target, mobj_t* const pInflictor, mobj_t* const pSourc
         #endif
 
         // Apply the damage to the player, set the attacker and increase the damage palette effect
-        pTargetPlayer->health = std::max(pTargetPlayer->health - damageAmt, 0);
+        pTargetPlayer->health = std::max<int32_t>(pTargetPlayer->health - damageAmt, 0);
         pTargetPlayer->attacker = pSource;
         pTargetPlayer->damagecount += 1 + (damageAmt / 2);  // Tweak made in PSX version: add '1' here so that all damage causes a palette flash
     }

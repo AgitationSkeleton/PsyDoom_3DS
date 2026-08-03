@@ -183,7 +183,7 @@ void P_ExplodeMissile(mobj_t& mobj) noexcept {
     P_SetMobjState(mobj, mobjInfo.deathstate);
 
     // Some random state tic variation and make no longer a missile
-    mobj.tics = std::max(mobj.tics - (P_Random() & 1), 1);
+    mobj.tics = std::max<int32_t>(mobj.tics - (P_Random() & 1), 1);
     mobj.flags &= (~MF_MISSILE);
 
     // Stop the missile sound and start the explode sound
@@ -674,7 +674,7 @@ mobj_t* P_SpawnMissile(mobj_t& source, mobj_t& dest, const mobjtype_t type) noex
 
     // Figure out the z velocity based on how many tics it would take to reach the destination and z delta
     const fixed_t distToTarget = P_AproxDistance(dest.x - source.x, dest.y - source.y);
-    const int32_t flyTics = std::max(distToTarget / missileInfo.speed, 1);
+    const int32_t flyTics = std::max<int32_t>(distToTarget / missileInfo.speed, 1);
     const fixed_t deltaZ = dest.z - source.z;
 
     missile.momz = deltaZ / flyTics;

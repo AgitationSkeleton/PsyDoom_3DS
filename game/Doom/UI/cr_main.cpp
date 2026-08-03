@@ -16,6 +16,10 @@
 #include "PsyDoom/Input.h"
 #include "PsyDoom/MapInfo/MapInfo.h"
 #include "PsyDoom/Utils.h"
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+    #include "PsyDoom/Video.h"
+#endif
 #include "Wess/psxcd.h"
 
 // Holds resources and settings for one credits screen
@@ -146,6 +150,10 @@ void DRAW_Credits() noexcept {
     // PsyDoom: UI drawing setup for the new Vulkan renderer
     Utils::onBeginUIDrawing();
 
+    #if PSYDOOM_3DS
+        Screens3DS::setBottomScreen(Screens3DS::BottomScreen::BackgroundOnly);
+    #endif
+
     // Don't draw anything if the credits page is not valid!
     if (gCreditsPage < gPageDatas.size()) {
         // Draw the current credits page background
@@ -175,6 +183,18 @@ void DRAW_Credits() noexcept {
 
     // PsyDoom: draw any enabled performance counters
     I_DrawEnabledPerfCounters();
+
+    // PsyDoom 3DS: the top screen carries the finished screen; the touch screen gets a second pass over just this
+    // screen's background, so each display has a whole image of its own rather than sharing one.
+    #if PSYDOOM_3DS
+        I_SubmitGpuCmds();
+        Video::presentTopScreenOnly();
+        Screens3DS::setTopScreenAlreadyDrawn(true);
+        if (gCreditsPage < gPageDatas.size()) {
+            CrPageData& bgPageData = gPageDatas[gCreditsPage];
+            I_CacheAndDrawBackgroundSprite(bgPageData.bgTex, R_GetPaletteClutId(bgPageData.info.bgPal));
+        }
+    #endif
 
     // Finish up the frame
     I_SubmitGpuCmds();

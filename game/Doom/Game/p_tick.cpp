@@ -38,7 +38,11 @@
 #include "PsyDoom/ProgArgs.h"
 #include "PsyDoom/PsxPadButtons.h"
 #include "PsyDoom/SaveAndLoad.h"
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+#endif
 #include "PsyDoom/ScriptingEngine.h"
+#include "PsyDoom/Utils.h"
 #include "PsyDoom/Video.h"
 #include "PsyQ/LIBGPU.h"
 #include "Wess/psxcd.h"
@@ -808,6 +812,21 @@ void P_Drawer() noexcept {
 
     I_IncDrawnFrameCount();
 
+    // PsyDoom 3DS: during gameplay the touch screen is always the automap, which is why there is no automap toggle.
+    // It also carries the status bar if the player has moved it off the top screen.
+    #if PSYDOOM_3DS
+        const int32_t statusBarPos = PlayerPrefs::gStatusBarPos;
+        const bool bStatusBarOnTouchScreen = (statusBarPos != PlayerPrefs::STATUS_BAR_TOP_SCREEN);
+
+        Screens3DS::setBottomScreen(
+            (statusBarPos == PlayerPrefs::STATUS_BAR_TOUCH_TOP) ? Screens3DS::BottomScreen::AutomapStatusBarTop :
+            (statusBarPos == PlayerPrefs::STATUS_BAR_TOUCH_BOTTOM) ? Screens3DS::BottomScreen::AutomapStatusBarBottom :
+            Screens3DS::BottomScreen::Automap
+        );
+
+        Screens3DS::updateStereoState();
+    #endif
+
     // Draw either the automap or 3d view, depending on whether the automap is active or not.
     // PsyDoom: force the automap off if doing a camera.
     #if PSYDOOM_MODS
@@ -815,6 +834,33 @@ void P_Drawer() noexcept {
     #else
         const bool bShowAutomap = (gPlayers[gCurPlayerIndex].automapflags & AF_ACTIVE);
     #endif
+
+    // PsyDoom 3DS: stereoscopic 3D. Render the left eye first and bank it on the top screen, then fall through and
+    // render the right eye normally, which is what the present at the end of this function shows.
+    //
+    // This costs a second pass over the whole 3D view, so it roughly halves the frame rate. That is why it only happens
+    // when the 3D slider is actually raised: at zero separation there is nothing to render twice.
+    #if PSYDOOM_3DS
+        const bool bDrawStereo = (Screens3DS::isStereoActive() && (!bShowAutomap));
+
+        if (bDrawStereo) {
+            Screens3DS::setRenderEye(-1);
+            R_RenderPlayerView();
+
+            // The status bar is only part of the top screen image when it has not been moved to the touch screen
+            if (!bStatusBarOnTouchScreen) {
+                ST_Drawer();
+            }
+
+            I_SubmitGpuCmds();
+            Video::presentTopScreenOnly();
+            Screens3DS::setRenderEye(1);
+        } else {
+            Screens3DS::setRenderEye(0);
+        }
+    #endif
+
+    PSYDOOM_PROF_BEGIN(RenderPlayerView);
 
     if (bShowAutomap) {
         AM_Drawer();
@@ -831,7 +877,35 @@ void P_Drawer() noexcept {
         #endif
     }
 
-    ST_Drawer();
+    PSYDOOM_PROF_END(RenderPlayerView);
+    PSYDOOM_PROF_BEGIN(StatusBar);
+
+    // PsyDoom 3DS: two things decide when the status bar gets drawn.
+    //
+    // In stereo it was already drawn for the first eye, and the second eye's render only touches the 3D view above it,
+    // so those rows of the framebuffer still hold it - it is flat and identical for both eyes.
+    //
+    // With the status bar on the touch screen the 3D view now covers the whole framebuffer, so the view has to be
+    // banked to the top screen before the status bar is drawn over the bottom of it for the touch screen to pick up.
+    #if PSYDOOM_3DS
+        if (bStatusBarOnTouchScreen) {
+            // The stats and the paused plaque sit over the 3D view, so they have to go on before it is banked to the
+            // top screen; afterwards only the touch screen would ever see them
+            ST_DrawViewOverlays();
+
+            I_SubmitGpuCmds();
+            Video::presentTopScreenOnly();
+            Screens3DS::setTopScreenAlreadyDrawn(true);
+            ST_Drawer();
+        }
+        else if (!bDrawStereo) {
+            ST_Drawer();
+        }
+    #else
+        ST_Drawer();
+    #endif
+
+    PSYDOOM_PROF_END(StatusBar);
 
     // PsyDoom: draw any enabled performance counters
     #if PSYDOOM_MODS
@@ -844,6 +918,11 @@ void P_Drawer() noexcept {
     // Was previously done at the start of 'R_RenderPlayerView', before any world drawing was done.
     #if PSYDOOM_MODS
         I_DrawPresent();
+    #endif
+
+    // PsyDoom 3DS: back to mono for everything that is not the gameplay view
+    #if PSYDOOM_3DS
+        Screens3DS::setRenderEye(0);
     #endif
 }
 
@@ -1101,6 +1180,23 @@ void P_GatherTickInputs(TickInputs& inputs) noexcept {
         inputs.directSwitchToWeapon = (uint8_t) nextWeapon;
     }
 
+    // PsyDoom 3DS: weapon group toggles. Each prefers the first weapon of its pair, and gives way to the second when
+    // the first is already in hand or is not owned - the same rule the fist/chainsaw toggle above already uses.
+    {
+        const auto toggleWeaponGroup = [&](const Controls::Binding binding, const weapontype_t first, const weapontype_t second) noexcept {
+            if (!Controls::getBool(binding))
+                return;
+
+            const bool bTakeSecond = ((player.readyweapon == first) || (!player.weaponowned[first]));
+            inputs.directSwitchToWeapon = (uint8_t)((bTakeSecond) ? second : first);
+        };
+
+        toggleWeaponGroup(Controls::Binding::Weapon_GroupShotguns, wp_supershotgun, wp_shotgun);
+        toggleWeaponGroup(Controls::Binding::Weapon_GroupHeavy, wp_missile, wp_chainsaw);
+        toggleWeaponGroup(Controls::Binding::Weapon_GroupRapid, wp_chaingun, wp_pistol);
+        toggleWeaponGroup(Controls::Binding::Weapon_GroupEnergy, wp_plasma, wp_bfg);
+    }
+
     if (Controls::getBool(Controls::Binding::Weapon_Pistol))            { inputs.directSwitchToWeapon = wp_pistol;         }
     if (Controls::getBool(Controls::Binding::Weapon_Shotgun))           { inputs.directSwitchToWeapon = wp_shotgun;        }
     if (Controls::getBool(Controls::Binding::Weapon_SuperShotgun))      { inputs.directSwitchToWeapon = wp_supershotgun;   }
@@ -1143,7 +1239,7 @@ void P_GatherTickInputs(TickInputs& inputs) noexcept {
 
         // Get the index of the next weapon to select and schedule it to be selected
         if (numOwnedWeapons > 0) {
-            const int32_t nextWeaponIdx = std::clamp(selectedWeaponIdx + weaponScroll, 0, numOwnedWeapons - 1);
+            const int32_t nextWeaponIdx = std::clamp<int32_t>(selectedWeaponIdx + weaponScroll, 0, numOwnedWeapons - 1);
             inputs.directSwitchToWeapon = (uint8_t) ownedWeapons[nextWeaponIdx];
         }
     }
@@ -1244,7 +1340,12 @@ void P_PsxButtonsToTickInputs(const padbuttons_t buttons, const padbuttons_t* co
 
     if (buttons & PAD_SELECT) {
         inputs.fMenuBack() = true;
-        inputs.fToggleMap() = true;
+
+        // PsyDoom 3DS: the touch screen carries the automap the whole time the player is in a level, so there is
+        // nothing for an automap toggle to do and the button is left free.
+        #if !PSYDOOM_3DS
+            inputs.fToggleMap() = true;
+        #endif
     }
 
     if (buttons & PSX_MOUSE_ANY_BTNS) {

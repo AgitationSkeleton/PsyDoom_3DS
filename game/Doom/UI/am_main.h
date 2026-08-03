@@ -34,6 +34,11 @@ void AM_Start() noexcept;
 void AM_Control(player_t& player) noexcept;
 void AM_Drawer() noexcept;
 
+#if PSYDOOM_3DS
+    using AMExternalLineDrawer = void (*)(void* pUserData, uint32_t color, int32_t x1, int32_t y1, int32_t x2, int32_t y2);
+    void AM_DrawerToExternal(AMExternalLineDrawer lineDrawer, void* pUserData) noexcept;
+#endif
+
 #if PSYDOOM_MODS
     uint32_t AM_GetPlayerColor(const int32_t playerIdx, const bool bBrighten) noexcept;
     uint32_t AM_GetMobjColor(const mobj_t& mobj, const bool bBrighten) noexcept;

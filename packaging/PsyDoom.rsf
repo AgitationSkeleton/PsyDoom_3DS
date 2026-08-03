@@ -1,0 +1,95 @@
+BasicInfo:
+  Title: "$(APP_TITLE)"
+  CompanyCode: "00"
+  ProductCode: "$(APP_PRODUCT_CODE)"
+  ContentType: "Application"
+  Logo: "Homebrew"
+
+TitleInfo:
+  Category: "Application"
+  UniqueId: $(APP_UNIQUE_ID)
+
+RomFs:
+  RootPath: "$(DIR_ROMFS)"
+
+Option:
+  UseOnSD: true
+  FreeProductCode: true
+  MediaFootPadding: false
+  EnableCrypt: false
+  EnableCompress: true
+
+SystemControlInfo:
+  StackSize: 0x100000
+
+# Everything below decides what the installed title is actually allowed to do. It was missing entirely, which left the
+# CIA relying on whatever makerom's '-desc app' preset happened to provide: no declared memory mode, no declared service
+# access, and no New 3DS clock request. The 3DSX build never needed any of this, because homebrew launched from another
+# process inherits that process's permissions - which is exactly why a bug here would show up only in the CIA.
+AccessControlInfo:
+  # Process settings: 'Application' memory in the normal 64MB arrangement
+  MemoryType: Application
+  SystemMode: 64MB
+  IdealProcessor: 0
+  AffinityMask: 1
+  # 0x30, the standard application priority. SDL creates its audio thread at 0x2F expecting exactly this, so that
+  # audio preempts the game loop rather than competing with it; anything higher here starves the sound.
+  Priority: 48
+  MaxCpu: 0
+  HandleTableSize: 0x200
+  DisableDebug: false
+  EnableForceDebug: false
+  CanWriteSharedPage: true
+  CanUsePrivilegedPriority: false
+  CanUseNonAlphabetAndNumber: true
+  PermitMainFunctionArgument: true
+  CanShareDeviceMemory: true
+  RunnableOnSleep: false
+  SpecialMemoryArrange: true
+
+  # New 3DS only. Without these an installed title stays on the Old 3DS 268 MHz clock with no L2 cache no matter what
+  # 'osSetSpeedupEnable' asks for, so a New 3DS would run the game no faster than an original one.
+  SystemModeExt: 124MB
+  CpuSpeed: 804MHz
+  EnableL2Cache: true
+  # The third core a New 3DS has for applications. The audio thread is put on it so that generating sound does not have
+  # to compete with the game loop for the same core, which no amount of buffering can make up for.
+  CanAccessCore2: true
+
+  # Filesystem access. 'DirectSdmc' is what lets the game read and write 'sdmc:/3ds/PsyDoom', which is where the disc
+  # data is extracted to and where saves, settings and the startup log live.
+  FileSystemAccess:
+    - DirectSdmc
+    - CategorySystemApplication
+
+  # Services the game asks for by name. Missing any one of these means the matching 'Init' call fails at startup:
+  # gsp::Gpu and APT:U for the displays, hid:USER and the ir services for the buttons, C-Stick and ZL/ZR, dsp::DSP for
+  # audio, fs:USER for the SD card, and nwm::UDS plus ndm:u for local wireless.
+  ServiceAccessControl:
+    - APT:U
+    - ac:u
+    - cfg:u
+    - csnd:SND
+    - dsp::DSP
+    - fs:USER
+    - gsp::Gpu
+    - hid:USER
+    - ir:USER
+    - ir:rst
+    - ir:u
+    - ndm:u
+    - news:u
+    - nwm::UDS
+    - ptm:u
+    - ptm:sysm
+    - pxi:dev
+    - soc:U
+    - ssl:C
+    - y2r:u
+
+  # Exheader/kernel compatibility
+  CoreVersion: 2
+  DescVersion: 2
+  ReleaseKernelMajor: "02"
+  ReleaseKernelMinor: "33"
+  UseExtSaveData: false

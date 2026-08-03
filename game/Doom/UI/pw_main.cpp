@@ -14,6 +14,9 @@
 #include "Doom/Game/p_password.h"
 #include "Doom/Game/p_tick.h"
 #include "Doom/Renderer/r_data.h"
+#if PSYDOOM_3DS
+    #include "menu3ds.h"
+#endif
 #include "o_main.h"
 #include "PsyDoom/Controls.h"
 #include "PsyDoom/Game.h"
@@ -325,6 +328,11 @@ void DRAW_PasswordScreen() noexcept {
         Utils::onBeginUIDrawing();  // PsyDoom: UI drawing setup for the new Vulkan renderer
     #endif
 
+    // PsyDoom 3DS: the title goes on the top screen, on a background of its own
+    #if PSYDOOM_3DS
+        Menu3DS_DrawTitleScreen(gTex_OptionsBg, Game::getTexClut_OptionsBg(), "Password");
+    #endif
+
     O_DrawBackground(gTex_OptionsBg, Game::getTexClut_OptionsBg(), 128, 128, 128);
 
     // Setup the draw mode
@@ -402,7 +410,9 @@ void DRAW_PasswordScreen() noexcept {
     }
 
     // Draw the screen title
-    I_DrawString(-1, 20, "Password");
+    #if !PSYDOOM_3DS
+        I_DrawString(-1, 20, "Password");
+    #endif
 
     if (gInvalidPasswordFlashTicsLeft & 4) {
         // Flash the invalid password message if a password was entered wrong

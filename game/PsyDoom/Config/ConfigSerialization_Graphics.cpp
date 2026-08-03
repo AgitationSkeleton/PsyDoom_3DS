@@ -1,4 +1,4 @@
-#include "ConfigSerialization_Graphics.h"
+﻿#include "ConfigSerialization_Graphics.h"
 
 #include "Config.h"
 #include "IniUtils.h"
@@ -20,6 +20,34 @@ Config_Graphics gConfig_Graphics = {};
 void initCfgSerialization_Graphics() noexcept {
     auto& cfg = gConfig_Graphics;
 
+#if PSYDOOM_3DS
+    gbFullscreen = true;
+    gbEnableVSync = true;
+    gOutputResolutionW = 400;
+    gOutputResolutionH = 240;
+    gOutputDisplayIndex = 0;
+    gbExclusiveFullscreenMode = false;
+    gLogicalDisplayW = 292.0f;
+    gbDisableVulkanRenderer = true;
+    gVulkanRenderHeight = 240;
+    gbVulkanPixelStretch = false;
+    gbVulkanTripleBuffer = false;
+    gbVulkanDrawExtendedStatusBar = false;
+    gbVulkanWidescreenEnabled = false;
+    gAAMultisamples = 1;
+    gbSkyLeakFix = false;
+    gbVulkanBrightenAutomap = false;
+    gbUseVulkan32BitShading = false;
+    gVramSizeInMegabytes = 4;
+    gVulkanPreferredDevicesRegex.clear();
+
+    cfg.logicalDisplayWidth = makeConfigField("LogicalDisplayWidth", "", gLogicalDisplayW, 292.0f);
+    cfg.topOverscanPixels = makeConfigField("TopOverscanPixels", "", gTopOverscanPixels, 0);
+    cfg.bottomOverscanPixels = makeConfigField("BottomOverscanPixels", "", gBottomOverscanPixels, 6);
+    cfg.enhanceWallDrawPrecision = makeConfigField("EnhanceWallDrawPrecision", "", gbEnhanceWallDrawPrecision, true);
+    cfg.floorRenderGapFix = makeConfigField("FloorRenderGapFix", "", gbFloorRenderGapFix, true);
+    cfg.useExtendedAutomapColors = makeConfigField("UseExtendedAutomapColors", "", gbUseExtendedAutomapColors, false);
+#else
     cfg.fullscreen = makeConfigField(
         "Fullscreen",
         "Fullscreen or windowed mode toggle.\n"
@@ -320,6 +348,9 @@ void initCfgSerialization_Graphics() noexcept {
         gVulkanPreferredDevicesRegex,
         ""
     );
+#endif
 }
 
 END_NAMESPACE(ConfigSerialization)
+
+

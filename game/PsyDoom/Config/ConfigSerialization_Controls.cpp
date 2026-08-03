@@ -18,6 +18,43 @@ Config_Controls gConfig_Controls = {};
 //------------------------------------------------------------------------------------------------------------------------------------------
 // A documentation header to place at the start of the controls INI file
 //------------------------------------------------------------------------------------------------------------------------------------------
+#if PSYDOOM_3DS
+const char* const CONTROL_BINDINGS_INI_HEADER =
+R"(#---------------------------------------------------------------------------------------------------
+# Nintendo 3DS control bindings.
+#
+# Every physical control is reachable through SDL's gamepad names. The 3DS hardware maps like so:
+#
+#   Gamepad A / B / X / Y           A / B / X / Y
+#   Gamepad LeftShoulder            L
+#   Gamepad RightShoulder           R
+#   Gamepad LeftTrigger             ZL              (New 3DS / New 2DS XL only)
+#   Gamepad RightTrigger            ZR              (New 3DS / New 2DS XL only)
+#   Gamepad Start / Back            START / SELECT
+#   Gamepad DpUp/Down/Left/Right    D-Pad
+#   Gamepad LeftX / LeftY           Circle Pad
+#   Gamepad RightX / RightY         C-Stick         (New 3DS / New 2DS XL only)
+#
+# Assign inputs to the actions below, separating multiple inputs for one action with commas (,).
+# Names are case insensitive. Leave a value empty to unbind it.
+#
+# The shipped defaults are fully playable on an Old 3DS/2DS, which has no C-Stick, ZL or ZR:
+#
+#   Circle Pad      move forward/back, turn left/right
+#   C-Stick         strafe left/right, move forward/back
+#   D-Pad           move forward/back, turn left/right
+#   A               use / open, confirm in menus
+#   B               run, back out of menus
+#   X / Y           previous / next weapon
+#   L               strafe modifier (makes the D-Pad turn inputs strafe), automap zoom out
+#   R               attack, automap zoom in
+#   ZL / ZR         run / attack
+#   START           pause
+#   SELECT          unbound (the touch screen shows the automap the whole time)
+#---------------------------------------------------------------------------------------------------
+
+)";
+#else
 const char* const CONTROL_BINDINGS_INI_HEADER = 
 R"(#---------------------------------------------------------------------------------------------------
 # Control bindings: available input source names/identifiers.
@@ -81,6 +118,7 @@ R"(#----------------------------------------------------------------------------
 #---------------------------------------------------------------------------------------------------
 
 )";
+#endif
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Helpers that define a control binding config field
@@ -120,13 +158,18 @@ void initCfgSerialization_Controls() noexcept {
 
     #define CONTROL_FIELD_WITH_DOC(COMMENT, BINDING_NAME, DEFAULT_VALUE)\
         makeControlConfigField(COMMENT, #BINDING_NAME, Controls::Binding::BINDING_NAME, DEFAULT_VALUE)
+    #if PSYDOOM_3DS
+        #define PLATFORM_BINDING(DESKTOP_VALUE, HANDHELD_VALUE) HANDHELD_VALUE
+    #else
+        #define PLATFORM_BINDING(DESKTOP_VALUE, HANDHELD_VALUE) DESKTOP_VALUE
+    #endif
 
     // Analog movement and turning actions
     cfg.analog_moveForward = CONTROL_FIELD_WITH_DOC(
         "Analog movement and turning actions.\n"
         "Note: analog turn sensitivity can be modified via the 'Input' section.",
         Analog_MoveForward,
-        "Gamepad LeftY-"
+        PLATFORM_BINDING("Gamepad LeftY-", "Gamepad LeftY-")
     );
 
     cfg.analog_moveBackward = CONTROL_FIELD(Analog_MoveBackward, "Gamepad LeftY+");
@@ -140,42 +183,44 @@ void initCfgSerialization_Controls() noexcept {
         "Digital movement and turning actions. Turn sensitivity and acceleration are based on the original\n"
         "PSX values, though greater precision can be achieved if using uncapped framerates.",
         Digital_MoveForward,
-        "W, Up, Gamepad DpUp"
+        PLATFORM_BINDING("W, Up, Gamepad DpUp", "")
     );
 
-    cfg.digital_moveBackward = CONTROL_FIELD(Digital_MoveBackward, "S, Down, Gamepad DpDown");
-    cfg.digital_strafeLeft = CONTROL_FIELD(Digital_StrafeLeft, "A");
-    cfg.digital_strafeRight = CONTROL_FIELD(Digital_StrafeRight, "D");
-    cfg.digital_turnLeft = CONTROL_FIELD(Digital_TurnLeft, "Left, Gamepad DpLeft");
-    cfg.digital_turnRight = CONTROL_FIELD(Digital_TurnRight, "Right, Gamepad DpRight");
+    cfg.digital_moveBackward = CONTROL_FIELD(Digital_MoveBackward, PLATFORM_BINDING("S, Down, Gamepad DpDown", ""));
+    cfg.digital_strafeLeft = CONTROL_FIELD(Digital_StrafeLeft, PLATFORM_BINDING("A", ""));
+    cfg.digital_strafeRight = CONTROL_FIELD(Digital_StrafeRight, PLATFORM_BINDING("D", ""));
+    cfg.digital_turnLeft = CONTROL_FIELD(Digital_TurnLeft, PLATFORM_BINDING("Left, Gamepad DpLeft", ""));
+    cfg.digital_turnRight = CONTROL_FIELD(Digital_TurnRight, PLATFORM_BINDING("Right, Gamepad DpRight", ""));
 
     // In-game actions & modifiers
     cfg.action_use = CONTROL_FIELD_WITH_DOC(
         "In-game actions & modifiers",
         Action_Use,
-        "Space, E, Mouse Right, Gamepad B"
+        PLATFORM_BINDING("Space, E, Mouse Right, Gamepad B", "Gamepad A, Gamepad B, Gamepad LeftShoulder")
     );
 
-    cfg.action_attack = CONTROL_FIELD(Action_Attack, "Mouse Left, Gamepad RightTrigger, Left Ctrl, Right Ctrl, Gamepad Y");
-    cfg.action_respawn = CONTROL_FIELD(Action_Respawn, "Mouse Left, Gamepad RightTrigger, Left Ctrl, Right Ctrl, Gamepad Y");
-    cfg.modifier_run = CONTROL_FIELD(Modifier_Run, "Left Shift, Right Shift, Gamepad X, Gamepad LeftTrigger");
-    cfg.modifier_strafe = CONTROL_FIELD(Modifier_Strafe, "Left Alt, Right Alt, Gamepad A");
-    cfg.toggle_autorun = CONTROL_FIELD(Toggle_Autorun, "CapsLock");
-    cfg.quicksave = CONTROL_FIELD(Quicksave, "F5");
-    cfg.quickload = CONTROL_FIELD(Quickload, "F9");
+    cfg.action_attack = CONTROL_FIELD(Action_Attack, PLATFORM_BINDING("Mouse Left, Gamepad RightTrigger, Left Ctrl, Right Ctrl, Gamepad Y", "Gamepad RightShoulder, Gamepad X"));
+    cfg.action_respawn = CONTROL_FIELD(Action_Respawn, PLATFORM_BINDING("Mouse Left, Gamepad RightTrigger, Left Ctrl, Right Ctrl, Gamepad Y", "Gamepad RightShoulder, Gamepad X"));
+    cfg.modifier_run = CONTROL_FIELD(Modifier_Run, PLATFORM_BINDING("Left Shift, Right Shift, Gamepad X, Gamepad LeftTrigger", "Gamepad Y"));
+    cfg.modifier_strafe = CONTROL_FIELD(Modifier_Strafe, PLATFORM_BINDING("Left Alt, Right Alt, Gamepad A", ""));
+    cfg.toggle_autorun = CONTROL_FIELD(Toggle_Autorun, PLATFORM_BINDING("CapsLock", ""));
+    cfg.quicksave = CONTROL_FIELD(Quicksave, PLATFORM_BINDING("F5", ""));
+    cfg.quickload = CONTROL_FIELD(Quickload, PLATFORM_BINDING("F9", ""));
 
     // Toggles
     cfg.toggle_pause = CONTROL_FIELD_WITH_DOC(
         "Toggle in-game pause, automap, uncapped framerate, and between the Classic and Vulkan renderer (if possible).\n"
         "Also a control to toggle which player is viewed when playing back multiplayer demos.",
         Toggle_Pause,
-        "Escape, P, Pause, Gamepad Start"
+        PLATFORM_BINDING("Escape, P, Pause, Gamepad Start", "Gamepad Start")
     );
 
-    cfg.toggle_map = CONTROL_FIELD(Toggle_Map, "Tab, M, Gamepad Back");
-    cfg.toggle_renderer = CONTROL_FIELD(Toggle_Renderer, "`");
+    // PsyDoom 3DS: unbound, because the touch screen shows the automap for the whole of gameplay.
+    // SELECT is left free so it can be rebound to something the player actually wants.
+    cfg.toggle_map = CONTROL_FIELD(Toggle_Map, PLATFORM_BINDING("Tab, M, Gamepad Back", ""));
+    cfg.toggle_renderer = CONTROL_FIELD(Toggle_Renderer, PLATFORM_BINDING("`", ""));
     cfg.toggle_uncappedFps = CONTROL_FIELD(Toggle_UncappedFps, "");
-    cfg.toggle_viewPlayer = CONTROL_FIELD(Toggle_ViewPlayer, "V");
+    cfg.toggle_viewPlayer = CONTROL_FIELD(Toggle_ViewPlayer, PLATFORM_BINDING("V", ""));
 
     // Weapon switching
     cfg.weapon_scrollUp = CONTROL_FIELD_WITH_DOC(
@@ -185,49 +230,60 @@ void initCfgSerialization_Controls() noexcept {
         "allow multiple weapons to be scrolled past in one frame. This helps rapid scrolling feel much\n"
         "more responsive.",
         Weapon_ScrollUp,
-        "Mouse Wheel+"
+        PLATFORM_BINDING("Mouse Wheel+", "")
     );
-    cfg.weapon_scrollDown = CONTROL_FIELD(Weapon_ScrollDown, "Mouse Wheel-");
-    cfg.weapon_previous = CONTROL_FIELD(Weapon_Previous, "PageDown, [, Gamepad LeftShoulder");
-    cfg.weapon_next = CONTROL_FIELD(Weapon_Next, "PageUp, ], Gamepad RightShoulder");
-    cfg.weapon_fistChainsaw = CONTROL_FIELD(Weapon_FistChainsaw, "1");
-    cfg.weapon_pistol = CONTROL_FIELD(Weapon_Pistol, "2");
-    cfg.weapon_shotgun = CONTROL_FIELD(Weapon_Shotgun, "3");
-    cfg.weapon_superShotgun = CONTROL_FIELD(Weapon_SuperShotgun, "4");
-    cfg.weapon_chaingun = CONTROL_FIELD(Weapon_Chaingun, "5");
-    cfg.weapon_rocketLauncher = CONTROL_FIELD(Weapon_RocketLauncher, "6");
-    cfg.weapon_plasmaRifle = CONTROL_FIELD(Weapon_PlasmaRifle, "7");
-    cfg.weapon_bfg = CONTROL_FIELD(Weapon_BFG, "8");
+    cfg.weapon_scrollDown = CONTROL_FIELD(Weapon_ScrollDown, PLATFORM_BINDING("Mouse Wheel-", ""));
+    cfg.weapon_previous = CONTROL_FIELD(Weapon_Previous, PLATFORM_BINDING("PageDown, [, Gamepad LeftShoulder", "Gamepad LeftTrigger"));
+    cfg.weapon_next = CONTROL_FIELD(Weapon_Next, PLATFORM_BINDING("PageUp, ], Gamepad RightShoulder", "Gamepad RightTrigger"));
+    cfg.weapon_fistChainsaw = CONTROL_FIELD(Weapon_FistChainsaw, PLATFORM_BINDING("1", ""));
+    cfg.weapon_pistol = CONTROL_FIELD(Weapon_Pistol, PLATFORM_BINDING("2", ""));
+    cfg.weapon_shotgun = CONTROL_FIELD(Weapon_Shotgun, PLATFORM_BINDING("3", ""));
+    cfg.weapon_superShotgun = CONTROL_FIELD(Weapon_SuperShotgun, PLATFORM_BINDING("4", ""));
+    cfg.weapon_chaingun = CONTROL_FIELD(Weapon_Chaingun, PLATFORM_BINDING("5", ""));
+    cfg.weapon_rocketLauncher = CONTROL_FIELD(Weapon_RocketLauncher, PLATFORM_BINDING("6", ""));
+    cfg.weapon_plasmaRifle = CONTROL_FIELD(Weapon_PlasmaRifle, PLATFORM_BINDING("7", ""));
+    cfg.weapon_bfg = CONTROL_FIELD(Weapon_BFG, PLATFORM_BINDING("8", ""));
+
+    cfg.weapon_groupShotguns = CONTROL_FIELD_WITH_DOC(
+        "Weapon group toggles. Each one picks between two weapons, preferring the first, and swaps to the second\n"
+        "when the first is already in hand or is not owned. Weapons that are not owned are skipped.",
+        Weapon_GroupShotguns,
+        PLATFORM_BINDING("", "Gamepad DpUp")
+    );
+
+    cfg.weapon_groupHeavy = CONTROL_FIELD(Weapon_GroupHeavy, PLATFORM_BINDING("", "Gamepad DpDown"));
+    cfg.weapon_groupRapid = CONTROL_FIELD(Weapon_GroupRapid, PLATFORM_BINDING("", "Gamepad DpRight"));
+    cfg.weapon_groupEnergy = CONTROL_FIELD(Weapon_GroupEnergy, PLATFORM_BINDING("", "Gamepad DpLeft"));
 
     // Menu & UI controls
     cfg.menu_up = CONTROL_FIELD_WITH_DOC(
         "Menu & UI controls",
         Menu_Up,
-        "Up, Gamepad DpUp, Gamepad LeftY-, Gamepad RightY-"
+        PLATFORM_BINDING("Up, Gamepad DpUp, Gamepad LeftY-, Gamepad RightY-", "Gamepad DpUp, Gamepad LeftY-")
     );
 
-    cfg.menu_down = CONTROL_FIELD(Menu_Down, "Down, Gamepad DpDown, Gamepad LeftY+, Gamepad RightY+");
-    cfg.menu_left = CONTROL_FIELD(Menu_Left, "Left, Gamepad DpLeft, Gamepad LeftX-, Gamepad RightX-");
-    cfg.menu_right = CONTROL_FIELD(Menu_Right, "Right, Gamepad DpRight, Gamepad LeftX+, Gamepad RightX+");
-    cfg.menu_ok = CONTROL_FIELD(Menu_Ok, "Return, Space, Mouse Left, Left Ctrl, Right Ctrl, Gamepad A, Gamepad RightTrigger");
-    cfg.menu_back = CONTROL_FIELD(Menu_Back, "Escape, Tab, Mouse Right, Gamepad B, Gamepad Back");
+    cfg.menu_down = CONTROL_FIELD(Menu_Down, PLATFORM_BINDING("Down, Gamepad DpDown, Gamepad LeftY+, Gamepad RightY+", "Gamepad DpDown, Gamepad LeftY+"));
+    cfg.menu_left = CONTROL_FIELD(Menu_Left, PLATFORM_BINDING("Left, Gamepad DpLeft, Gamepad LeftX-, Gamepad RightX-", "Gamepad DpLeft, Gamepad LeftX-"));
+    cfg.menu_right = CONTROL_FIELD(Menu_Right, PLATFORM_BINDING("Right, Gamepad DpRight, Gamepad LeftX+, Gamepad RightX+", "Gamepad DpRight, Gamepad LeftX+"));
+    cfg.menu_ok = CONTROL_FIELD(Menu_Ok, PLATFORM_BINDING("Return, Space, Mouse Left, Left Ctrl, Right Ctrl, Gamepad A, Gamepad RightTrigger", "Gamepad A"));
+    cfg.menu_back = CONTROL_FIELD(Menu_Back, PLATFORM_BINDING("Escape, Tab, Mouse Right, Gamepad B, Gamepad Back", "Gamepad Back"));
     cfg.menu_start = CONTROL_FIELD(Menu_Start, "Gamepad Start");
-    cfg.menu_enterPasswordChar = CONTROL_FIELD(Menu_EnterPasswordChar, "Return, Space, Mouse Left, Left Ctrl, Right Ctrl, Gamepad A, Gamepad RightTrigger");
-    cfg.menu_deletePasswordChar = CONTROL_FIELD(Menu_DeletePasswordChar, "Delete, Backspace, Mouse Right, Gamepad X, Gamepad LeftTrigger");
+    cfg.menu_enterPasswordChar = CONTROL_FIELD(Menu_EnterPasswordChar, PLATFORM_BINDING("Return, Space, Mouse Left, Left Ctrl, Right Ctrl, Gamepad A, Gamepad RightTrigger", "Gamepad A"));
+    cfg.menu_deletePasswordChar = CONTROL_FIELD(Menu_DeletePasswordChar, PLATFORM_BINDING("Delete, Backspace, Mouse Right, Gamepad X, Gamepad LeftTrigger", "Gamepad Back"));
 
     // Automap controls
     cfg.automap_zoomIn = CONTROL_FIELD_WITH_DOC(
         "Automap controls",
         Automap_ZoomIn,
-        "=, Keypad +, Gamepad RightTrigger"
+        PLATFORM_BINDING("=, Keypad +, Gamepad RightTrigger", "Gamepad RightTrigger, Gamepad RightShoulder")
     );
 
-    cfg.automap_zoomOut = CONTROL_FIELD(Automap_ZoomOut, "-, Keypad -, Gamepad LeftTrigger");
-    cfg.automap_moveUp = CONTROL_FIELD(Automap_MoveUp, "Up, W, Gamepad DpUp, Gamepad LeftY-, Gamepad RightY-");
-    cfg.automap_moveDown = CONTROL_FIELD(Automap_MoveDown, "Down, S, Gamepad DpDown, Gamepad LeftY+, Gamepad RightY+");
-    cfg.automap_moveLeft = CONTROL_FIELD(Automap_MoveLeft, "Left, A, Gamepad DpLeft, Gamepad LeftX-, Gamepad RightX-");
-    cfg.automap_moveRight = CONTROL_FIELD(Automap_MoveRight, "Right, D, Gamepad DpRight, Gamepad LeftX+, Gamepad RightX+");
-    cfg.automap_pan = CONTROL_FIELD(Automap_Pan, "F, Left Alt, Right Alt, Gamepad A");
+    cfg.automap_zoomOut = CONTROL_FIELD(Automap_ZoomOut, PLATFORM_BINDING("-, Keypad -, Gamepad LeftTrigger", "Gamepad LeftTrigger, Gamepad LeftShoulder"));
+    cfg.automap_moveUp = CONTROL_FIELD(Automap_MoveUp, PLATFORM_BINDING("Up, W, Gamepad DpUp, Gamepad LeftY-, Gamepad RightY-", "Gamepad DpUp, Gamepad LeftY-, Gamepad RightY-"));
+    cfg.automap_moveDown = CONTROL_FIELD(Automap_MoveDown, PLATFORM_BINDING("Down, S, Gamepad DpDown, Gamepad LeftY+, Gamepad RightY+", "Gamepad DpDown, Gamepad LeftY+, Gamepad RightY+"));
+    cfg.automap_moveLeft = CONTROL_FIELD(Automap_MoveLeft, PLATFORM_BINDING("Left, A, Gamepad DpLeft, Gamepad LeftX-, Gamepad RightX-", "Gamepad DpLeft, Gamepad LeftX-, Gamepad RightX-"));
+    cfg.automap_moveRight = CONTROL_FIELD(Automap_MoveRight, PLATFORM_BINDING("Right, D, Gamepad DpRight, Gamepad LeftX+, Gamepad RightX+", "Gamepad DpRight, Gamepad LeftX+, Gamepad RightX+"));
+    cfg.automap_pan = CONTROL_FIELD(Automap_Pan, PLATFORM_BINDING("F, Left Alt, Right Alt, Gamepad A", "Gamepad A"));
 
     // PSX button bindings for cheat codes
     cfg.psxCheatCode_up = CONTROL_FIELD_WITH_DOC(
@@ -237,22 +293,23 @@ void initCfgSerialization_Controls() noexcept {
         "For example inputs mapped to the PSX 'Cross' button will be interpreted as that while attempting\n"
         "to enter an original cheat code sequence.",
         PSXCheatCode_Up,
-        "Up, W, Gamepad DpUp, Gamepad LeftY-, Gamepad RightY-"
+        PLATFORM_BINDING("Up, W, Gamepad DpUp, Gamepad LeftY-, Gamepad RightY-", "Gamepad DpUp, Gamepad LeftY-")
     );
 
-    cfg.psxCheatCode_down = CONTROL_FIELD(PSXCheatCode_Down, "Down, S, Gamepad DpDown, Gamepad LeftY+, Gamepad RightY+");
-    cfg.psxCheatCode_left = CONTROL_FIELD(PSXCheatCode_Left, "Left, Gamepad DpLeft, Gamepad LeftX-, Gamepad RightX-");
-    cfg.psxCheatCode_right = CONTROL_FIELD(PSXCheatCode_Right, "Right, Gamepad DpRight, Gamepad LeftX+, Gamepad RightX+");
-    cfg.psxCheatCode_triangle = CONTROL_FIELD(PSXCheatCode_Triangle, "Mouse Left, Left Ctrl, Right Ctrl, Gamepad Y");
-    cfg.psxCheatCode_circle = CONTROL_FIELD(PSXCheatCode_Circle, "Space, Mouse Right, Gamepad B");
-    cfg.psxCheatCode_cross = CONTROL_FIELD(PSXCheatCode_Cross, "F, Left Alt, Right Alt, Gamepad A");
-    cfg.psxCheatCode_square = CONTROL_FIELD(PSXCheatCode_Square, "Left Shift, Right Shift, Gamepad X");
-    cfg.psxCheatCode_l1 = CONTROL_FIELD(PSXCheatCode_L1, "A, Gamepad LeftShoulder");
-    cfg.psxCheatCode_r1 = CONTROL_FIELD(PSXCheatCode_R1, "D, Gamepad RightShoulder");
-    cfg.psxCheatCode_l2 = CONTROL_FIELD(PSXCheatCode_L2, "PageDown, [, Gamepad LeftTrigger");
-    cfg.psxCheatCode_r2 = CONTROL_FIELD(PSXCheatCode_R2, "PageUp, ], Gamepad RightTrigger");
+    cfg.psxCheatCode_down = CONTROL_FIELD(PSXCheatCode_Down, PLATFORM_BINDING("Down, S, Gamepad DpDown, Gamepad LeftY+, Gamepad RightY+", "Gamepad DpDown, Gamepad LeftY+"));
+    cfg.psxCheatCode_left = CONTROL_FIELD(PSXCheatCode_Left, PLATFORM_BINDING("Left, Gamepad DpLeft, Gamepad LeftX-, Gamepad RightX-", "Gamepad DpLeft, Gamepad LeftX-"));
+    cfg.psxCheatCode_right = CONTROL_FIELD(PSXCheatCode_Right, PLATFORM_BINDING("Right, Gamepad DpRight, Gamepad LeftX+, Gamepad RightX+", "Gamepad DpRight, Gamepad LeftX+"));
+    cfg.psxCheatCode_triangle = CONTROL_FIELD(PSXCheatCode_Triangle, PLATFORM_BINDING("Mouse Left, Left Ctrl, Right Ctrl, Gamepad Y", "Gamepad Y"));
+    cfg.psxCheatCode_circle = CONTROL_FIELD(PSXCheatCode_Circle, PLATFORM_BINDING("Space, Mouse Right, Gamepad B", "Gamepad B"));
+    cfg.psxCheatCode_cross = CONTROL_FIELD(PSXCheatCode_Cross, PLATFORM_BINDING("F, Left Alt, Right Alt, Gamepad A", "Gamepad A"));
+    cfg.psxCheatCode_square = CONTROL_FIELD(PSXCheatCode_Square, PLATFORM_BINDING("Left Shift, Right Shift, Gamepad X", "Gamepad X"));
+    cfg.psxCheatCode_l1 = CONTROL_FIELD(PSXCheatCode_L1, PLATFORM_BINDING("A, Gamepad LeftShoulder", "Gamepad LeftShoulder"));
+    cfg.psxCheatCode_r1 = CONTROL_FIELD(PSXCheatCode_R1, PLATFORM_BINDING("D, Gamepad RightShoulder", "Gamepad RightShoulder"));
+    cfg.psxCheatCode_l2 = CONTROL_FIELD(PSXCheatCode_L2, PLATFORM_BINDING("PageDown, [, Gamepad LeftTrigger", "Gamepad LeftTrigger"));
+    cfg.psxCheatCode_r2 = CONTROL_FIELD(PSXCheatCode_R2, PLATFORM_BINDING("PageUp, ], Gamepad RightTrigger", "Gamepad RightTrigger"));
 
     // Done with these
+    #undef PLATFORM_BINDING
     #undef CONTROL_FIELD
     #undef CONTROL_FIELD_WITH_DOC
 }

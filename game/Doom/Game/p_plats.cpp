@@ -347,7 +347,7 @@ bool EV_DoCustomPlat(sector_t& sector, const CustomPlatDef platDef) noexcept {
     plat.speed = std::abs(platDef.speed);
     plat.low = std::min(platDef.minHeight, platDef.maxHeight);
     plat.high = std::max(platDef.minHeight, platDef.maxHeight);
-    plat.wait = std::max(platDef.waitTime, 1);
+    plat.wait = std::max<int32_t>(platDef.waitTime, 1);
     plat.count = (platDef.startState == 0) ? plat.wait : 0;
 
     if (platDef.startState < 0) {

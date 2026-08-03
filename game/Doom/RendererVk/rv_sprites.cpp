@@ -698,7 +698,7 @@ void RV_DrawWeapon() noexcept {
         
         // Get the size and location of the weapon sprite
         const float sprX = RV_FixedToFloat(pSprite->sx.renderValue()) + (float) HALF_SCREEN_W - (float) tex.offsetX;
-        const float sprY = RV_FixedToFloat(pSprite->sy.renderValue()) + (float) VIEW_3D_H - 1.0f - (float) tex.offsetY;
+        const float sprY = RV_FixedToFloat(pSprite->sy.renderValue()) + (float) gViewHeight - 1.0f - (float) tex.offsetY;
         const float sprW = tex.width;
         const float sprH = tex.height;
 

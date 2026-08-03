@@ -20,6 +20,9 @@
 #include "PsyDoom/Input.h"
 #include "PsyDoom/MapInfo/MapInfo.h"
 #include "PsyDoom/Utils.h"
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+#endif
 #include "PsyDoom/Video.h"
 #include "PsyDoom/Vulkan/VRenderer.h"
 #include "PsyQ/LIBGPU.h"
@@ -165,7 +168,7 @@ static void TI_DrawGecMeBeta3Logos() noexcept {
     const uint8_t rgb = (uint8_t) gTitleScreenFadeRgb;
 
     // Decide on the x and y position of the 'DOOM' and 'Final DOOM' logos: put them side by side and roughly in the center of the screen
-    const int32_t freeXSpace = std::max(SCREEN_W - gTex_DOOM.width - gTex_FINAL.width, 0);
+    const int32_t freeXSpace = std::max<int32_t>(SCREEN_W - gTex_DOOM.width - gTex_FINAL.width, 0);
     const int32_t leftRightXPad = freeXSpace / 3;
     const int32_t middleXSpacing = freeXSpace - leftRightXPad * 2;
     const int32_t doomLogoX = leftRightXPad;
@@ -245,8 +248,8 @@ static void DRAW_Title_GecMeBeta3() noexcept {
 static void DRAW_Title_GecMeBeta4() noexcept {
     // Fade in the background and logos and draw semi transparent fire (additive blending) in between them
     const int32_t elapsedVBlanks = gTicCon - gMenuTimeoutStartTicCon;
-    const uint8_t title1Rgb = (uint8_t) std::clamp(elapsedVBlanks - 60, 0, 128);
-    const uint8_t title2Rgb = (uint8_t) std::clamp(elapsedVBlanks - 180, 0, 128);
+    const uint8_t title1Rgb = (uint8_t) std::clamp<int32_t>(elapsedVBlanks - 60, 0, 128);
+    const uint8_t title2Rgb = (uint8_t) std::clamp<int32_t>(elapsedVBlanks - 180, 0, 128);
 
     TI_DrawSpriteTexture(gTex_TITLE, Game::getTexClut_TITLE(), I_GetCenteredDrawPos_X(gTex_TITLE2), 0, title1Rgb);
     TI_DrawFire(false, true);
@@ -564,6 +567,11 @@ void DRAW_Title() noexcept {
     // PsyDoom: UI drawing setup for the new Vulkan renderer
     #if PSYDOOM_MODS
         Utils::onBeginUIDrawing();
+
+        // PsyDoom 3DS: the title screen is a single full screen image; a second copy of it below adds nothing
+        #if PSYDOOM_3DS
+            Screens3DS::setBottomScreen(Screens3DS::BottomScreen::Blank);
+        #endif
     #endif
 
     // Draw the title screen in the appropriate style

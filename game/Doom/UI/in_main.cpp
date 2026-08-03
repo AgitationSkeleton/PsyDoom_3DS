@@ -18,6 +18,10 @@
 #include "PsyDoom/PlayerPrefs.h"
 #include "PsyDoom/PsxPadButtons.h"
 #include "PsyDoom/Utils.h"
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+    #include "PsyDoom/Video.h"
+#endif
 #include "pw_main.h"
 #include "SmallString.h"
 #include "st_main.h"
@@ -407,6 +411,10 @@ void IN_Drawer() noexcept {
 
     #if PSYDOOM_MODS
         Utils::onBeginUIDrawing();  // PsyDoom: UI drawing setup for the new Vulkan renderer
+
+        #if PSYDOOM_3DS
+            Screens3DS::setBottomScreen(Screens3DS::BottomScreen::BackgroundOnly);
+        #endif
     #endif
 
     const gametype_t netGameType = IN_GetNetGameType();
@@ -422,6 +430,15 @@ void IN_Drawer() noexcept {
     // PsyDoom: draw any enabled performance counters
     #if PSYDOOM_MODS
         I_DrawEnabledPerfCounters();
+    #endif
+
+    // PsyDoom 3DS: the top screen carries the finished screen; the touch screen gets a second pass over just this
+    // screen's background, so each display has a whole image of its own rather than sharing one.
+    #if PSYDOOM_3DS
+        I_SubmitGpuCmds();
+        Video::presentTopScreenOnly();
+        Screens3DS::setTopScreenAlreadyDrawn(true);
+        I_CacheAndDrawBackgroundSprite(gTex_BACK, Game::getTexClut_Inter_BACK());
     #endif
 
     I_SubmitGpuCmds();
@@ -517,7 +534,7 @@ void IN_SingleDrawer() noexcept {
 
             // Format the time string and figure out how long it is
             char timeString[256];
-            std::snprintf(timeString, C_ARRAY_SIZE(timeString), "%d.%02d.%02d", minutes, seconds, hundreths);
+            std::snprintf(timeString, C_ARRAY_SIZE(timeString), "%d.%02d.%02d", static_cast<int>(minutes), static_cast<int>(seconds), static_cast<int>(hundreths));
             const int32_t timeStringWidth = I_GetStringWidth(timeString);
 
             // Show the time elapsed
@@ -807,3 +824,4 @@ void IN_DeathmatchDrawer() noexcept {
         }
     }
 }
+

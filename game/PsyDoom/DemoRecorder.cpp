@@ -1,4 +1,4 @@
-//------------------------------------------------------------------------------------------------------------------------------------------
+﻿//------------------------------------------------------------------------------------------------------------------------------------------
 // A module responsible for most of the logic relating to demo recording.
 // The demos are recorded in a new format specific to PsyDoom that has greater capabilities than the original format.
 // Improvements include greater timing resolution (30Hz vs 15Hz ticks), analog movement and multiplayer support.
@@ -35,7 +35,7 @@ static DemoTickInputs   gPrevTickInputs[MAXPLAYERS];    // The previous inputs o
 static std::string getDemoFilePath() noexcept {
     const std::string userDataFolder = Utils::getOrCreateUserDataFolder();
     char demoFileName[64];
-    std::snprintf(demoFileName, C_ARRAY_SIZE(demoFileName), "DEMO_MAP%02d.LMP", gGameMap);
+    std::snprintf(demoFileName, C_ARRAY_SIZE(demoFileName), "DEMO_MAP%02d.LMP", static_cast<int>(gGameMap));
     return userDataFolder + demoFileName;
 }
 
@@ -208,8 +208,8 @@ void recordTick() noexcept {
         statusByte |= 0x40;
     }
 
-    statusByte |= ((uint8_t) std::clamp(gPlayersElapsedVBlanks[0], 0, 7)) << 3;
-    statusByte |= ((uint8_t) std::clamp(gPlayersElapsedVBlanks[1], 0, 7));
+    statusByte |= ((uint8_t) std::clamp<int32_t>(gPlayersElapsedVBlanks[0], 0, 7)) << 3;
+    statusByte |= ((uint8_t) std::clamp<int32_t>(gPlayersElapsedVBlanks[1], 0, 7));
 
     // Write the status byte followed by the inputs if they have changed
     try {
@@ -233,3 +233,4 @@ void recordTick() noexcept {
 }
 
 END_NAMESPACE(DemoRecorder)
+

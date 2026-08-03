@@ -7,6 +7,11 @@
 #include "Doom/Game/doomdata.h"
 #include "PsyDoom/Config/Config.h"
 #include "PsyQ/LIBGPU.h"
+
+#if PSYDOOM_3DS
+    #include "Gpu.h"
+#endif
+
 #include "r_data.h"
 #include "r_local.h"
 #include "r_main.h"
@@ -345,11 +350,11 @@ static void R_DrawWallPieceImpl(
         const int64_t v2by = ((int64_t) yb * (int64_t) vert2.scale) >> FRACBITS;
 
         // Completely offscreen at the top?
-        if ((v1by < -HALF_VIEW_3D_H) && (v2by < -HALF_VIEW_3D_H))
+        if ((v1by < -gHalfViewHeight) && (v2by < -gHalfViewHeight))
             return;
 
         // Completely offscreen at the bottom?
-        if ((v1ty >= HALF_VIEW_3D_H) && (v2ty >= HALF_VIEW_3D_H))
+        if ((v1ty >= gHalfViewHeight) && (v2ty >= gHalfViewHeight))
             return;
     }
     #endif
@@ -508,8 +513,8 @@ static void R_DrawWallPieceImpl(
         d_rshift<HIP_TO_LOWP_SHIFT>(seg.offset + FRACUNIT + segTextureOffset - (segP1ViewX * segCos + segP1ViewY * segSin));
 
     // Compute the start top and bottom y values and bring into screenspace
-    fixed_t ybCur_frac = yb * vert1.scale + HALF_VIEW_3D_H * FRACUNIT;
-    fixed_t ytCur_frac = yt * vert1.scale + HALF_VIEW_3D_H * FRACUNIT;
+    fixed_t ybCur_frac = yb * vert1.scale + gHalfViewHeight * FRACUNIT;
+    fixed_t ytCur_frac = yt * vert1.scale + gHalfViewHeight * FRACUNIT;
 
     // Adjust the starting column if the beginning of the seg is obscured: skip past the not visible columns
     int32_t xCur = x1;
@@ -534,13 +539,26 @@ static void R_DrawWallPieceImpl(
     // Draw all of the visible wall columns
     fixed_t scaleCur = vert1.scale;
 
+    #if PSYDOOM_3DS
+        // PsyDoom 3DS: in low detail mode only every Nth screen column is submitted; the rasterizer widens each one to
+        // cover the columns that were skipped. Skipping here (rather than only in the rasterizer) also avoids the
+        // per column divide, lighting and primitive setup below, which is most of the cost of a wall column.
+        const int32_t colStep = Gpu::gPixelStepX;
+    #endif
+
     while (xCur < xEnd) {
         // Get column pixel/integer y bounds
         int16_t ytCur = (int16_t) d_fixed_to_int(ytCur_frac);
         int16_t ybCur = (int16_t) d_fixed_to_int(ybCur_frac);
 
         // Ignore the column if it is completely offscreen
-        if ((ytCur <= VIEW_3D_H) && (ybCur >= 0)) {
+        #if PSYDOOM_3DS
+            const bool bDrawColumn = ((ytCur <= gViewHeight) && (ybCur >= 0) && ((xCur % colStep) == 0));
+        #else
+            const bool bDrawColumn = ((ytCur <= gViewHeight) && (ybCur >= 0));
+        #endif
+
+        if (bDrawColumn) {
             // Compute the 'U' texture coordinate for the column
             const uint8_t uCur = (isectDiv != 0) ? (uint8_t) d_rshift<LOWP_FRAC_BITS>(isectNum / isectDiv + segStartU) : 0;
 
@@ -568,7 +586,7 @@ static void R_DrawWallPieceImpl(
                 // Compute the amount of 'v' coordinate from the top of the column to the center of the screen.
                 // PsyDoom: extend this to do similar clipping and calculations on the two wall column colors also (for dual color lighting).
                 const int32_t vHeight = vbCur - vtCur;
-                const fixed_t yAboveCenterPercent = d_int_to_fixed(HALF_VIEW_3D_H - ytCur) / colHeight;
+                const fixed_t yAboveCenterPercent = d_int_to_fixed(gHalfViewHeight - ytCur) / colHeight;
                 const int32_t vTopToCenter = d_fixed_to_int(yAboveCenterPercent * vHeight);
 
                 #if PSYDOOM_MODS
@@ -582,7 +600,7 @@ static void R_DrawWallPieceImpl(
 
                 // Compute the amount of 'v' coordinate for half of the screen.
                 // PsyDoom: extend this to do similar clipping and calculations on the two wall column colors also (for dual color lighting).
-                const fixed_t halfScreenFrac = d_int_to_fixed(HALF_VIEW_3D_H) / colHeight;
+                const fixed_t halfScreenFrac = d_int_to_fixed(gHalfViewHeight) / colHeight;
                 const int32_t vHalfScreen = d_fixed_to_int(halfScreenFrac * vHeight);
 
                 #if PSYDOOM_MODS
@@ -601,22 +619,22 @@ static void R_DrawWallPieceImpl(
 
                     #if PSYDOOM_MODS
                         // Note: need to guard against underflow due to rounding of potential negative numbers (color value deltas) working like a 'floor()' operation
-                        clipWtColR = (uint8_t) std::max(wtColR + rTopToCenter - rHalfScreen, 0);
-                        clipWtColG = (uint8_t) std::max(wtColG + gTopToCenter - gHalfScreen, 0);
-                        clipWtColB = (uint8_t) std::max(wtColB + bTopToCenter - bHalfScreen, 0);
+                        clipWtColR = (uint8_t) std::max<int32_t>(wtColR + rTopToCenter - rHalfScreen, 0);
+                        clipWtColG = (uint8_t) std::max<int32_t>(wtColG + gTopToCenter - gHalfScreen, 0);
+                        clipWtColB = (uint8_t) std::max<int32_t>(wtColB + bTopToCenter - bHalfScreen, 0);
                     #endif
                 }
 
-                if (ybCur > VIEW_3D_H) {
+                if (ybCur > gViewHeight) {
                     // Offscreen to the bottom: stop the v coordinate at the bottom of the screen
-                    ybCur = VIEW_3D_H;
+                    ybCur = gViewHeight;
                     vbCur = vtOrig + vTopToCenter + vHalfScreen;
 
                     #if PSYDOOM_MODS
                         // Note: need to guard against underflow due to rounding of potential negative numbers (color value deltas) working like a 'floor()' operation
-                        clipWbColR = (uint8_t) std::max(wtColR + rTopToCenter + rHalfScreen, 0);
-                        clipWbColG = (uint8_t) std::max(wtColG + gTopToCenter + gHalfScreen, 0);
-                        clipWbColB = (uint8_t) std::max(wtColB + bTopToCenter + bHalfScreen, 0);
+                        clipWbColR = (uint8_t) std::max<int32_t>(wtColR + rTopToCenter + rHalfScreen, 0);
+                        clipWbColG = (uint8_t) std::max<int32_t>(wtColG + gTopToCenter + gHalfScreen, 0);
+                        clipWbColB = (uint8_t) std::max<int32_t>(wtColB + bTopToCenter + bHalfScreen, 0);
                     #endif
                 }
             }
@@ -648,12 +666,12 @@ static void R_DrawWallPieceImpl(
                     botR = ((uint32_t) lightIntensity * clipWbColR) >> 7;
                     botG = ((uint32_t) lightIntensity * clipWbColG) >> 7;
                     botB = ((uint32_t) lightIntensity * clipWbColB) >> 7;
-                    topR = std::min(topR, 255);
-                    topG = std::min(topG, 255);
-                    topB = std::min(topB, 255);
-                    botR = std::min(botR, 255);
-                    botG = std::min(botG, 255);
-                    botB = std::min(botB, 255);
+                    topR = std::min<int32_t>(topR, 255);
+                    topG = std::min<int32_t>(topG, 255);
+                    topB = std::min<int32_t>(topB, 255);
+                    botR = std::min<int32_t>(botR, 255);
+                    botG = std::min<int32_t>(botG, 255);
+                    botB = std::min<int32_t>(botB, 255);
                 #else
                     r = ((uint32_t) lightIntensity * gCurLightValR) >> 7;
                     g = ((uint32_t) lightIntensity * gCurLightValG) >> 7;

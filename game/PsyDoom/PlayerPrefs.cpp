@@ -14,6 +14,13 @@
 #include "Video.h"
 #include "Wess/psxspu.h"
 
+#if PSYDOOM_3DS
+    #include "ControlSchemes3DS.h"
+    #include "Doom/Renderer/r_main.h"
+    #include "Gpu.h"
+    #include "Platform_3DS.h"
+#endif
+
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -35,6 +42,13 @@ StatDisplayMode     gStatDisplayMode;           // Which stats should be display
 Password            gLastPassword_Doom;         // Password for the current level the player is on: Doom
 Password            gLastPassword_FDoom;        // Password for the current level the player is on: Final Doom
 Password            gLastPassword_GecMe;        // Password for the current level the player is on: GEC Master Edition
+
+#if PSYDOOM_3DS
+    int32_t         gDetailMode;                // Rasterizer detail: -1 auto, 0 full, 1 low, 2 lowest
+    bool            gbFullWidthVideo;           // Stretch the game image to the full width of the top screen
+    int32_t         gStatusBarPos;              // Off the top screen gives the status bar rows to the 3D view
+    int32_t         gControlScheme;             // Which named set of control bindings is in use
+#endif
 
 // Internally kept settings
 static int32_t      gSoundVol;                      // Option for sound volume
@@ -147,16 +161,33 @@ static void loadPrefsFileIniEntry(const IniUtils::IniEntry& entry) noexcept {
     else if (entry.key == "alwaysRun") {
         gbAlwaysRun = entry.value.tryGetAsBool(gbAlwaysRun);
     }
+#if PSYDOOM_3DS
+    else if (entry.key == "detailMode") {
+        gDetailMode = std::clamp(entry.value.tryGetAsInt(gDetailMode), DETAIL_MODE_AUTO, DETAIL_MODE_MAX);
+    }
+    else if (entry.key == "fullWidthVideo") {
+        gbFullWidthVideo = entry.value.tryGetAsBool(gbFullWidthVideo);
+    }
+    else if (entry.key == "statusBarPos") {
+        gStatusBarPos = std::clamp<int32_t>(entry.value.tryGetAsInt(gStatusBarPos), 0, STATUS_BAR_POS_COUNT - 1);
+    }
+    else if (entry.key == "controlScheme") {
+        gControlScheme = std::clamp<int32_t>(entry.value.tryGetAsInt(gControlScheme), 0, ControlSchemes3DS::NUM_SCHEMES - 1);
+    }
+#else
     else if (entry.key == "uncapFramerate") {
         gbUncapFramerate = entry.value.tryGetAsBool(gbUncapFramerate);
     }
+#endif
     else if (entry.key == "statDisplayMode") {
         gStatDisplayMode = (StatDisplayMode) entry.value.tryGetAsInt((int32_t) gStatDisplayMode);
         gStatDisplayMode = std::clamp(gStatDisplayMode, StatDisplayMode::None, StatDisplayMode::KillsSecretsAndItems);  // Ensure it's in range
     }
+#if !PSYDOOM_3DS
     else if (entry.key == "startupWithVulkanRenderer") {
         gbStartupWithVulkanRenderer = entry.value.tryGetAsBool(gbStartupWithVulkanRenderer);
     }
+#endif
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -175,11 +206,26 @@ void setToDefaults() noexcept {
     // Turn speed is normal by default, auto-run off and no stat display
     gTurnSpeedMult100 = 100;
     gbAlwaysRun = false;
-    gbUncapFramerate = true;
     gStatDisplayMode = StatDisplayMode::None;
 
+    // PsyDoom 3DS: never enough headroom to render in between game ticks, so stay on the original frame pacing.
+    // Detail level is decided from the console model unless the player overrides it.
+#if PSYDOOM_3DS
+    gbUncapFramerate = false;
+    gDetailMode = DETAIL_MODE_AUTO;
+    gbFullWidthVideo = false;
+    gStatusBarPos = STATUS_BAR_TOP_SCREEN;
+    gControlScheme = (int32_t) ControlSchemes3DS::DEFAULT_SCHEME;
+#else
+    gbUncapFramerate = true;
+#endif
+
     // Prefer the Vulkan renderer by default
+#if PSYDOOM_3DS
+    gbStartupWithVulkanRenderer = false;
+#else
     gbStartupWithVulkanRenderer = true;
+#endif
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -195,12 +241,73 @@ void load() noexcept {
     // Read the .ini file if it exists, otherwise stop here
     const std::string prefsFilePath = getPrefsFilePath();
 
-    if (!FileUtils::fileExists(prefsFilePath.c_str()))
-        return;
+    if (FileUtils::fileExists(prefsFilePath.c_str())) {
+        const FileData prefsFileData = FileUtils::getContentsOfFile(prefsFilePath.c_str(), 1, std::byte(0));
+        IniUtils::parseIniFromString((const char*) prefsFileData.bytes.get(), prefsFileData.size - 1, loadPrefsFileIniEntry);
+    }
 
-    const FileData prefsFileData = FileUtils::getContentsOfFile(prefsFilePath.c_str(), 1, std::byte(0));
-    IniUtils::parseIniFromString((const char*) prefsFileData.bytes.get(), prefsFileData.size - 1, loadPrefsFileIniEntry);
+    // PsyDoom 3DS: push the loaded preferences to the parts of the engine that cache them
+    #if PSYDOOM_3DS
+        applyDetailMode();
+        applyStatusBarPlacement();
+        applyControlScheme();
+    #endif
 }
+
+#if PSYDOOM_3DS
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: resolve the detail preference and push it to the classic renderer's wall/floor fast paths
+//------------------------------------------------------------------------------------------------------------------------------------------
+int32_t getEffectiveDetailMode() noexcept {
+    if (gDetailMode >= DETAIL_MODE_MIN)
+        return std::min(gDetailMode, DETAIL_MODE_MAX);
+
+    // Auto: a New 3DS runs at 804 MHz with an L2 cache and can afford an extra column of detail
+    return (Platform3DS::isNew3DS()) ? 1 : 2;
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: give the 3D view the status bar's rows when the status bar has moved to the touch screen
+//------------------------------------------------------------------------------------------------------------------------------------------
+void applyStatusBarPlacement() noexcept {
+    R_SetViewHeight((gStatusBarPos == STATUS_BAR_TOP_SCREEN) ? BASE_VIEW_3D_H : MAX_VIEW_3D_H);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: put the saved control scheme into effect.
+//
+// This runs after the bindings file has been read, so it can tell a scheme that is still intact from one the player
+// has since edited underneath - in which case the selection quietly becomes 'Custom' and their edits stand.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void applyControlScheme() noexcept {
+    const ControlSchemes3DS::Scheme saved = (ControlSchemes3DS::Scheme) gControlScheme;
+    gControlScheme = (int32_t) ControlSchemes3DS::resolveOnStartup(saved);
+}
+
+void setControlScheme(const int32_t scheme) noexcept {
+    gControlScheme = std::clamp<int32_t>(scheme, 0, ControlSchemes3DS::NUM_SCHEMES - 1);
+    ControlSchemes3DS::applyScheme((ControlSchemes3DS::Scheme) gControlScheme);
+}
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: put the default layout in place, but as a custom one.
+//
+// The bindings become the default scheme's, and the selection becomes 'Custom' rather than the default scheme, so the
+// player can then edit them without the next launch putting the scheme back over the top of their changes.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void resetControlsToDefault() noexcept {
+    ControlSchemes3DS::applyScheme(ControlSchemes3DS::DEFAULT_SCHEME);
+    gControlScheme = (int32_t) ControlSchemes3DS::Scheme::Custom;
+}
+
+void applyDetailMode() noexcept {
+    switch (getEffectiveDetailMode()) {
+        case 0:     Gpu::setLowDetailSteps(1, 1);   break;
+        case 1:     Gpu::setLowDetailSteps(2, 1);   break;
+        default:    Gpu::setLowDetailSteps(3, 2);   break;
+    }
+}
+#endif
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Save the player preferences the preferences file
@@ -215,16 +322,25 @@ void save() noexcept {
 
     // Write out the preferences
     std::fprintf(pFile, "; WARNING: this file is auto-generated by PsyDoom, it may be overwritten at any time!\n");
-    std::fprintf(pFile, "soundVol = %d\n", gSoundVol);
-    std::fprintf(pFile, "musicVol = %d\n", gMusicVol);
+    std::fprintf(pFile, "soundVol = %d\n", static_cast<int>(gSoundVol));
+    std::fprintf(pFile, "musicVol = %d\n", static_cast<int>(gMusicVol));
     std::fprintf(pFile, "lastPassword_Doom = %s\n", getPasswordCString(gLastPassword_Doom).chars);
     std::fprintf(pFile, "lastPassword_FinalDoom = %s\n", getPasswordCString(gLastPassword_FDoom).chars);
     std::fprintf(pFile, "lastPassword_GecMe = %s\n", getPasswordCString(gLastPassword_GecMe).chars);
-    std::fprintf(pFile, "turnSpeedPercentMultiplier = %d\n", gTurnSpeedMult100);
+    std::fprintf(pFile, "turnSpeedPercentMultiplier = %d\n", static_cast<int>(gTurnSpeedMult100));
     std::fprintf(pFile, "alwaysRun = %d\n", (int) gbAlwaysRun);
+#if PSYDOOM_3DS
+    std::fprintf(pFile, "detailMode = %d\n", (int) gDetailMode);
+    std::fprintf(pFile, "fullWidthVideo = %d\n", (int) gbFullWidthVideo);
+    std::fprintf(pFile, "statusBarPos = %d\n", (int) gStatusBarPos);
+    std::fprintf(pFile, "controlScheme = %d\n", (int) gControlScheme);
+#else
     std::fprintf(pFile, "uncapFramerate = %d\n", (int) gbUncapFramerate);
+#endif
     std::fprintf(pFile, "statDisplayMode = %d\n", (int) gStatDisplayMode);
+#if !PSYDOOM_3DS
     std::fprintf(pFile, "startupWithVulkanRenderer = %d\n", (int) Video::isUsingVulkanRenderPath());
+#endif
 
     // Flush and close to finish up
     std::fflush(pFile);
@@ -299,3 +415,8 @@ bool shouldStartupWithVulkanRenderer() noexcept {
 }
 
 END_NAMESPACE(PlayerPrefs)
+
+
+
+
+

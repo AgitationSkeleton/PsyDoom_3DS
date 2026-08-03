@@ -15,6 +15,9 @@
 #include "Doom/Game/p_tick.h"
 #include "Doom/Renderer/r_data.h"
 #include "m_main.h"
+#if PSYDOOM_3DS
+    #include "menu3ds.h"
+#endif
 #include "o_main.h"
 #include "PsyDoom/Controls.h"
 #include "PsyDoom/Game.h"
@@ -219,12 +222,19 @@ void ErrorMenu_Draw() noexcept {
     // Increment the frame count for the texture cache and draw the background
     I_IncDrawnFrameCount();
     Utils::onBeginUIDrawing();
+    // PsyDoom 3DS: the title goes on the top screen, on a background of its own
+    #if PSYDOOM_3DS
+        Menu3DS_DrawTitleScreen(gTex_OptionsBg, Game::getTexClut_OptionsBg(), gErrorMenuTitle.c_str());
+    #endif
+
     O_DrawBackground(gTex_OptionsBg, Game::getTexClut_OptionsBg(), 128, 128, 128);
 
     // Don't do any rendering if we are about to exit the menu
     if (gGameAction == ga_nothing) {
         // Menu title
-        I_DrawString(-1, 20, gErrorMenuTitle.c_str());
+        #if !PSYDOOM_3DS
+            I_DrawString(-1, 20, gErrorMenuTitle.c_str());
+        #endif
 
         // Draw the error message lines
         int32_t yPos = 60;

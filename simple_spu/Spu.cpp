@@ -368,8 +368,8 @@ static void stepVoice(
     if (!voice.bDisabled) {
         const Sample rawSample = getInterpolatedVoiceSample(voice);
         const Sample sampleEnvScaled = rawSample * voice.envLevel;
-        const int16_t realVoiceVolL = (int16_t) std::clamp((int32_t) voice.volume.left * 2, INT16_MIN, +INT16_MAX);     // N.B: voice volume was divided by 2
-        const int16_t realVoiceVolR = (int16_t) std::clamp((int32_t) voice.volume.right * 2, INT16_MIN, +INT16_MAX);
+        const int16_t realVoiceVolL = (int16_t) std::clamp<int32_t>((int32_t) voice.volume.left * 2, INT16_MIN, +INT16_MAX);     // N.B: voice volume was divided by 2
+        const int16_t realVoiceVolR = (int16_t) std::clamp<int32_t>((int32_t) voice.volume.right * 2, INT16_MIN, +INT16_MAX);
 
         const StereoSample sampleVolScaled = {
             sampleEnvScaled * realVoiceVolL,

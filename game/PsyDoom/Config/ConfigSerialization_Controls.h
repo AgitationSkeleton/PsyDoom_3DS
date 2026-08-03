@@ -49,6 +49,10 @@ struct Config_Controls {
     ConfigField     weapon_rocketLauncher;
     ConfigField     weapon_plasmaRifle;
     ConfigField     weapon_bfg;
+    ConfigField     weapon_groupShotguns;
+    ConfigField     weapon_groupHeavy;
+    ConfigField     weapon_groupRapid;
+    ConfigField     weapon_groupEnergy;
     ConfigField     menu_up;
     ConfigField     menu_down;
     ConfigField     menu_left;

@@ -37,6 +37,42 @@ static bool gbPSXCD_IsCdInit;
 // Used to hold a file temporarily after opening
 static PsxCd_File gPSXCD_cdfile;
 
+// How many CDDA sectors of audio to hold in memory at once
+#if PSYDOOM_3DS
+    static constexpr int32_t PSXCD_AUDIO_BUFFER_SECTORS = 48;   // About 640 ms
+#else
+    static constexpr int32_t PSXCD_AUDIO_BUFFER_SECTORS = 1;
+#endif
+
+#if PSYDOOM_3DS
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: CD audio is read ahead on the main thread rather than by the SPU.
+//
+// The SPU asks for CD audio a sample at a time, on the audio thread. Reading the SD card to answer that means the
+// audio thread stops dead until the card comes back, and the sound stops with it - a bigger buffer only made that
+// happen less often and for longer each time, which is what "cuts out every half second" was.
+//
+// So the audio thread now only ever takes samples out of this ring, and the main thread puts them in. The lock around
+// it is held for a copy and two indices and never across a read, so the audio thread is never waiting on the card.
+//------------------------------------------------------------------------------------------------------------------------------------------
+static constexpr int32_t CD_RING_SAMPLES = (CDDA_SECTOR_SIZE * PSXCD_AUDIO_BUFFER_SECTORS) / (int32_t) sizeof(int16_t);
+static constexpr int32_t CD_SECTOR_SAMPLES = CDDA_SECTOR_SIZE / (int32_t) sizeof(int16_t);
+
+static int16_t      gCdRing[CD_RING_SAMPLES];
+static int32_t      gCdRingReadPos;       // Where the audio thread is taking samples from
+static int32_t      gCdRingWritePos;      // Where the main thread is putting them in
+static int32_t      gCdRingCount;         // How many samples are waiting
+static std::mutex   gCdRingMutex;
+
+// Throws away whatever is buffered: for when playback stops or jumps somewhere else
+static void ClearCdRing() noexcept {
+    std::lock_guard<std::mutex> lock(gCdRingMutex);
+    gCdRingReadPos = 0;
+    gCdRingWritePos = 0;
+    gCdRingCount = 0;
+}
+#endif
+
 // CD audio playback related state.
 // Access to all of this is controlled by the CD player mutex.
 static struct {
@@ -47,8 +83,19 @@ static struct {
     int32_t     loopTrack           = 0;                        // The track to play when looping
     int32_t     loopSectorOffset    = 0;                        // Offset (in sectors) to start at in the track when looping
 
-    // The CD audio buffer: we read CD audio in chunks
-    int16_t buffer[CDDA_SECTOR_SIZE / sizeof(int16_t)];
+    // The CD audio buffer: we read CD audio in chunks.
+    //
+    // PsyDoom 3DS: read many sectors at a time rather than one.
+    //
+    // This buffer is refilled from inside the SPU's callback, which runs on the audio thread, and refilling it means
+    // reading from the SD card. A single sector is a thirteenth of a second of audio, so the audio thread was stopping
+    // to wait on the card about seventy five times a second - several times within a single callback - and the music
+    // broke up accordingly. Sound effects were unaffected because they play from emulated SPU RAM and touch no I/O.
+    //
+    // Holding half a second means waiting on the card roughly twice a second instead, for a read that costs little
+    // more than a small one does: on this hardware the cost is mostly in making the request at all, not in the size of
+    // it. Seventy five kilobytes is a small price next to a sixteen megabyte zone heap.
+    int16_t buffer[(CDDA_SECTOR_SIZE * PSXCD_AUDIO_BUFFER_SECTORS) / sizeof(int16_t)];
 } gCdPlayer;
 
 // The lock for the CD player and a helper to lock/unlock via RAII.
@@ -73,6 +120,19 @@ static DiscReader gFileDiscReaders[MAX_OPEN_FILES] = {
 // A callback invoked by the SPU when it wants audio from the CD player - returns a single sample.
 //------------------------------------------------------------------------------------------------------------------------------------------
 static Spu::StereoSample SpuAudioCallback([[maybe_unused]] void* pUserData) noexcept {
+#if PSYDOOM_3DS
+    // PsyDoom 3DS: take what has been read ahead and nothing else. No file access, no waiting on the main thread:
+    // if the read ahead has not kept up then a moment of silence is far better than stalling the audio thread.
+    std::lock_guard<std::mutex> lock(gCdRingMutex);
+
+    if (gCdRingCount < 2)
+        return Spu::StereoSample{};
+
+    const Spu::StereoSample sample = { gCdRing[gCdRingReadPos], gCdRing[gCdRingReadPos + 1] };
+    gCdRingReadPos = (gCdRingReadPos + 2) % CD_RING_SAMPLES;
+    gCdRingCount -= 2;
+    return sample;
+#else
     // Lock the CD player while we are doing this.
     // Note that this thread also has the SPU lock at this point too.
     // Therefore the main thread must NOT lock both the CD player and the SPU at the same time, or otherwise a deadlock might occur.
@@ -142,7 +202,80 @@ static Spu::StereoSample SpuAudioCallback([[maybe_unused]] void* pUserData) noex
     Spu::StereoSample sample = { gCdPlayer.buffer[gCdPlayer.bufferOffset], gCdPlayer.buffer[gCdPlayer.bufferOffset + 1] };
     gCdPlayer.bufferOffset += 2;
     return sample;
+#endif
 }
+
+#if PSYDOOM_3DS
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: tops the CD audio ring back up. Must be called regularly from the main thread, and never from the
+// audio thread, since this is where the SD card is actually read.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void psxcd_update_audio_buffer() noexcept {
+    LockCdPlayer cdPlayerLock;
+
+    if ((!gCdPlayer.bPlay) || (!gCdPlayer.discReader.isTrackOpen()))
+        return;
+
+    DiscReader& disc = gCdPlayer.discReader;
+
+    // Fill whatever room there is, a sector at a time. Reading happens outside the ring's lock so the audio thread is
+    // never held up by it; only the copy in afterwards takes the lock.
+    for (;;) {
+        int32_t freeSamples;
+
+        {
+            std::lock_guard<std::mutex> lock(gCdRingMutex);
+            freeSamples = CD_RING_SAMPLES - gCdRingCount;
+        }
+
+        if (freeSamples < CD_SECTOR_SAMPLES)
+            break;
+
+        const DiscTrack* pTrack = disc.getOpenTrack();
+        int32_t trackSize = pTrack->trackPayloadSize;
+        int32_t trackOffset = disc.tell();
+
+        if (trackOffset >= trackSize) {
+            if (!gCdPlayer.bLoop) {
+                gCdPlayer.bPlay = false;
+                return;
+            }
+
+            if (disc.getTrackNum() != gCdPlayer.loopTrack) {
+                disc.setTrackNum(gCdPlayer.loopTrack);
+                pTrack = disc.getOpenTrack();
+                trackSize = pTrack->trackPayloadSize;
+            }
+
+            disc.trackSeekAbs((gCdPlayer.loopSectorOffset > 0) ? CDDA_SECTOR_SIZE * gCdPlayer.loopSectorOffset : 0);
+            trackOffset = disc.tell();
+        }
+
+        int16_t staging[CD_SECTOR_SAMPLES];
+        const int32_t samplesToRead = std::min<int32_t>((trackSize - trackOffset) / (int32_t) sizeof(int16_t), CD_SECTOR_SAMPLES);
+        const int32_t samplesToZero = CD_SECTOR_SAMPLES - samplesToRead;
+
+        if (samplesToRead > 0) {
+            disc.read(staging, samplesToRead * (int32_t) sizeof(int16_t));
+        }
+
+        if (samplesToZero > 0) {
+            std::memset(staging + samplesToRead, 0, (size_t) samplesToZero * sizeof(int16_t));
+        }
+
+        {
+            std::lock_guard<std::mutex> lock(gCdRingMutex);
+
+            for (int32_t i = 0; i < CD_SECTOR_SAMPLES; ++i) {
+                gCdRing[gCdRingWritePos] = staging[i];
+                gCdRingWritePos = (gCdRingWritePos + 1) % CD_RING_SAMPLES;
+            }
+
+            gCdRingCount += CD_SECTOR_SAMPLES;
+        }
+    }
+}
+#endif
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Initialize the WESS (Williams Entertainment Sound System) CD handling module.
@@ -393,6 +526,11 @@ static void psxcd_play_internal(
         // Mark the player as playing and save loop parameters
         gCdPlayer.bPlay = true;
         gCdPlayer.bufferOffset = CDDA_SECTOR_SIZE / sizeof(int16_t);    // Need to read a sector
+
+        // PsyDoom 3DS: whatever was buffered belongs to wherever playback used to be
+        #if PSYDOOM_3DS
+            ClearCdRing();
+        #endif
         gCdPlayer.bLoop = bLoop;
         gCdPlayer.loopTrack = loopTrack;
         gCdPlayer.loopSectorOffset = loopSectorOffset;
@@ -478,6 +616,10 @@ void psxcd_stop() noexcept {
         gCdPlayer.bLoop = false;
         gCdPlayer.bufferOffset = 0;
         gCdPlayer.loopSectorOffset = 0;
+
+        #if PSYDOOM_3DS
+            ClearCdRing();
+        #endif
     }
 }
 

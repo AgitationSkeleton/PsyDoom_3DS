@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ConfigSerialization.h"
 
@@ -10,6 +10,14 @@ BEGIN_NAMESPACE(ConfigSerialization)
 
 // N.B: must ONLY contain 'ConfigField' entries!
 struct Config_Graphics {
+#if PSYDOOM_3DS
+    ConfigField     logicalDisplayWidth;
+    ConfigField     topOverscanPixels;
+    ConfigField     bottomOverscanPixels;
+    ConfigField     enhanceWallDrawPrecision;
+    ConfigField     floorRenderGapFix;
+    ConfigField     useExtendedAutomapColors;
+#else
     ConfigField     fullscreen;
     ConfigField     enableVSync;
     ConfigField     outputResolutionW;
@@ -34,6 +42,7 @@ struct Config_Graphics {
     ConfigField     useExtendedAutomapColors;
     ConfigField     vramSizeInMegabytes;
     ConfigField     vulkanPreferredDevicesRegex;
+#endif
 
     inline ConfigFieldList getFieldList() noexcept {
         static_assert(sizeof(*this) % sizeof(ConfigField) == 0);
@@ -46,3 +55,5 @@ extern Config_Graphics gConfig_Graphics;
 void initCfgSerialization_Graphics() noexcept;
 
 END_NAMESPACE(ConfigSerialization)
+
+

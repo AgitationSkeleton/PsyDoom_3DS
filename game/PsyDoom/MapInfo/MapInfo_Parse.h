@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "FatalErrors.h"
 #include "Macros.h"
@@ -28,7 +28,7 @@ template <class ...FmtStrArgs>
 [[noreturn]] inline void error(const TextLoc loc, const char* const errorFmtStr, FmtStrArgs... fmtStrArgs) noexcept {
     char locStr[128];
     char msgStr[256];
-    std::snprintf(locStr, C_ARRAY_SIZE(locStr), "Error parsing MAPINFO at line %u column %u!", loc.line + 1u, loc.column + 1u);
+    std::snprintf(locStr, C_ARRAY_SIZE(locStr), "Error parsing MAPINFO at line %u column %u!", static_cast<unsigned int>(loc.line + 1u), static_cast<unsigned int>(loc.column + 1u));
     std::snprintf(msgStr, C_ARRAY_SIZE(msgStr), errorFmtStr, fmtStrArgs...);
     FatalErrors::raiseF("%s\n%s", locStr, msgStr);
 }
@@ -297,3 +297,4 @@ std::vector<Token> tokenizeMapInfo(const char* const mapInfoStr) noexcept;
 MapInfo parseMapInfo(const char* const mapInfoStr) noexcept;
 
 END_NAMESPACE(MapInfo)
+

@@ -32,6 +32,9 @@ extern angle_t          gViewAngle;
 extern fixed_t          gViewCos;
 extern fixed_t          gViewSin;
 extern bool             gbIsSkyVisible;
+
+// Sets the height of the 3D view and rebuilds the tables that depend on it; see the implementation for details
+void R_SetViewHeight(const int32_t viewHeight) noexcept;
 extern MATRIX           gDrawMatrix;
 extern bool             gbDoViewLighting;
 

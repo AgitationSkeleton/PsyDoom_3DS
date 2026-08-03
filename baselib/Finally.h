@@ -14,7 +14,7 @@ public:
     }
 
     inline Finally(const Finally& other) noexcept
-        : mLambda(other.lambda)
+        : mLambda(other.mLambda)
     {
     }
 

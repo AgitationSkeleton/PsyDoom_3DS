@@ -4,6 +4,7 @@
 #include "Doom/Base/i_main.h"
 #include "Doom/Game/p_setup.h"
 #include "PsyDoom/Config/Config.h"
+#include "PsyDoom/Utils.h"
 #include "PsyQ/LIBETC.h"
 #include "PsyQ/LIBGTE.h"
 #include "r_local.h"
@@ -256,7 +257,9 @@ void R_DrawSubsector(subsector_t& subsec) noexcept {
 
             // Only draw walls for this leaf edge if its seg has visible columns
             if (pSeg && (pSeg->flags & SGF_VISIBLE_COLS)) {
+                PSYDOOM_PROF_BEGIN(Walls);
                 R_DrawWalls(*pEdge);
+                PSYDOOM_PROF_END(Walls);
             }
         }
     }
@@ -276,16 +279,22 @@ void R_DrawSubsector(subsector_t& subsec) noexcept {
     #endif
 
     if ((!bHasSkyFloor) && (gViewZ > drawSecFloorH)) {
+        PSYDOOM_PROF_BEGIN(Flats);
         R_DrawSubsectorFlat(drawleaf, false);
+        PSYDOOM_PROF_END(Flats);
     }
 
     // Draw the ceiling if below it and it is not a sky ceiling
     if ((drawsec.ceilingpic != -1) && (gViewZ < drawSecCeilH)) {
+        PSYDOOM_PROF_BEGIN(Flats);
         R_DrawSubsectorFlat(drawleaf, true);
+        PSYDOOM_PROF_END(Flats);
     }
 
     // Draw all sprites in the subsector
+    PSYDOOM_PROF_BEGIN(Sprites);
     R_DrawSubsectorSprites(subsec);
+    PSYDOOM_PROF_END(Sprites);
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------

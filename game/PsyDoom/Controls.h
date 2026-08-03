@@ -38,6 +38,12 @@ enum class Binding : uint16_t {
     Weapon_RocketLauncher,
     Weapon_PlasmaRifle,
     Weapon_BFG,
+    // Weapon group toggles: each picks between two weapons, preferring the first, and swaps to the second when the
+    // first is already in hand or is not owned. This is how the Xbox 360 release of Doom II drives its D-Pad.
+    Weapon_GroupShotguns,
+    Weapon_GroupHeavy,
+    Weapon_GroupRapid,
+    Weapon_GroupEnergy,
     // In-game actions and modifiers
     Action_Use,
     Action_Attack,

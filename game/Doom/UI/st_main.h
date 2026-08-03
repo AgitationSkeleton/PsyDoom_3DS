@@ -76,6 +76,15 @@ extern spclface_e               gSpclFaceType;
 void ST_Init() noexcept;
 void ST_InitEveryLevel() noexcept;
 void ST_Ticker() noexcept;
+#if PSYDOOM_MODS
+    // PsyDoom: the level stats overlay, drawn separately from the status bar because the two do not always happen at
+    // the same moment. See the definition.
+    void ST_DrawLevelStats() noexcept;
+
+    // PsyDoom: everything drawn over the 3D view rather than as part of the status bar. See the definition.
+    void ST_DrawViewOverlays() noexcept;
+#endif
+
 void ST_Drawer() noexcept;
 
 #if PSYDOOM_MODS

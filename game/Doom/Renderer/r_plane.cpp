@@ -25,7 +25,7 @@ enum : int32_t {
 };
 
 // The bounds of each flat span for the currently drawing flat
-static span_t gFlatSpans[VIEW_3D_H];
+static span_t gFlatSpans[MAX_VIEW_3D_H];
 
 #if PSYDOOM_MODS
     // PsyDoom: a temporary buffer used used to store screenspace x and y values (interleaved) for leaf edge vertices
@@ -194,9 +194,9 @@ static void R_DrawFlatSpans(leaf_t& leaf, const int32_t planeViewZ, const textur
                     const int32_t vertIntScale = vertScale >> FRACBITS;
                     const fixed_t vertFracScale = vertScale & FRACMASK;
                     const int32_t vertY = (planeViewZ * vertIntScale) + d_fixed_to_int(planeViewZ * vertFracScale);
-                    const int32_t screenY = (HALF_VIEW_3D_H - 1) - vertY;
+                    const int32_t screenY = (gHalfViewHeight - 1) - vertY;
                 #else
-                    const int32_t screenY = (HALF_VIEW_3D_H - 1) - d_fixed_to_int(planeViewZ * vert.scale);
+                    const int32_t screenY = (gHalfViewHeight - 1) - d_fixed_to_int(planeViewZ * vert.scale);
                 #endif
 
                 gLeafScreenVerts.push_back(vert.screenx);
@@ -216,7 +216,7 @@ static void R_DrawFlatSpans(leaf_t& leaf, const int32_t planeViewZ, const textur
 
             for (int32_t edgeIdx = 0; edgeIdx < leaf.numEdges; ++edgeIdx, ++pEdge, ++pVertScreenX, ++pVertScreenY) {
                 const vertex_t& vert = *pEdge->vertex;
-                const int32_t screenY = (HALF_VIEW_3D_H - 1) - d_fixed_to_int(planeViewZ * vert.scale);
+                const int32_t screenY = (gHalfViewHeight - 1) - d_fixed_to_int(planeViewZ * vert.scale);
 
                 *pVertScreenX = vert.screenx;
                 *pVertScreenY = screenY;
@@ -226,7 +226,7 @@ static void R_DrawFlatSpans(leaf_t& leaf, const int32_t planeViewZ, const textur
 
     // Determine the y bounds for the plane and for each row determine the x bounds.
     // Basically figuring out what spans we need to draw:
-    int32_t planeBegY = VIEW_3D_H;
+    int32_t planeBegY = gViewHeight;
     int32_t planeEndY = 0;
 
     {
@@ -324,8 +324,8 @@ static void R_DrawFlatSpans(leaf_t& leaf, const int32_t planeViewZ, const textur
 
                 int32_t yEnd = topScreenY;
 
-                if (topScreenY > VIEW_3D_H) {
-                    yEnd = VIEW_3D_H;
+                if (topScreenY > gViewHeight) {
+                    yEnd = gViewHeight;
                 }
 
                 if (y < planeBegY) {
@@ -355,8 +355,8 @@ static void R_DrawFlatSpans(leaf_t& leaf, const int32_t planeViewZ, const textur
 
     // PsyDoom: sanity check these bounds and get whether to apply the floor gap fix
     #if PSYDOOM_MODS
-        ASSERT((planeBegY >= planeEndY) || (planeBegY >= 0 && planeBegY <  VIEW_3D_H));
-        ASSERT((planeBegY >= planeEndY) || (planeEndY >= 0 && planeEndY <= VIEW_3D_H));
+        ASSERT((planeBegY >= planeEndY) || (planeBegY >= 0 && planeBegY <  gViewHeight));
+        ASSERT((planeBegY >= planeEndY) || (planeEndY >= 0 && planeEndY <= gViewHeight));
 
         const bool bFixFloorGaps = Config::gbFloorRenderGapFix;
     #endif

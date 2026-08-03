@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include "ConfigSerialization.h"
 
@@ -10,7 +10,9 @@ BEGIN_NAMESPACE(ConfigSerialization)
 
 // N.B: must ONLY contain 'ConfigField' entries!
 struct Config_Input {
+#if !PSYDOOM_3DS
     ConfigField     mouseTurnSpeed;
+#endif
     ConfigField     gamepadDeadZone;
     ConfigField     gamepadFastTurnSpeed_High;
     ConfigField     gamepadFastTurnSpeed_Low;
@@ -29,3 +31,4 @@ extern Config_Input gConfig_Input;
 void initCfgSerialization_Input() noexcept;
 
 END_NAMESPACE(ConfigSerialization)
+

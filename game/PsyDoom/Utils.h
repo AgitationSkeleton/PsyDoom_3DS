@@ -12,6 +12,38 @@ struct IsoFileSys;
 
 BEGIN_NAMESPACE(Utils)
 
+#if defined(PSYDOOM_3DS_BENCHMARK) && PSYDOOM_3DS_BENCHMARK
+    // Benchmark-only coarse profiler: accumulates wall time under a handful of named scopes and periodically
+    // dumps the per-frame averages to 'sdmc:/3ds/PsyDoom/<variant>/scopes.csv'. Compiled out of shipping builds.
+    enum class ProfScope : int {
+        RenderPlayerView,
+        StatusBar,
+        PresentTop,
+        PresentBottom,
+        PresentSwap,
+        Bsp,            // BSP traversal and visibility
+        Walls,          // Wall column setup and rasterization
+        Flats,          // Floor and ceiling row setup and rasterization
+        Sprites,        // Things in the world
+        Sky,
+        Weapon,         // The player's own weapon sprite
+        Count
+    };
+
+    void profBegin(const ProfScope scope) noexcept;
+    void profEnd(const ProfScope scope) noexcept;
+    void profEndFrame() noexcept;
+
+    #define PSYDOOM_PROF_BEGIN(SCOPE)   Utils::profBegin(Utils::ProfScope::SCOPE)
+    #define PSYDOOM_PROF_END(SCOPE)     Utils::profEnd(Utils::ProfScope::SCOPE)
+    #define PSYDOOM_PROF_END_FRAME()    Utils::profEndFrame()
+#else
+    #define PSYDOOM_PROF_BEGIN(SCOPE)
+    #define PSYDOOM_PROF_END(SCOPE)
+    #define PSYDOOM_PROF_END_FRAME()
+#endif
+
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 // A simple container for data read from a file on the game disc.
 // Holds the byte array and the number of bytes for the data.

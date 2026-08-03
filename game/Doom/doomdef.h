@@ -24,8 +24,27 @@ static constexpr int32_t SCREEN_W = 256;
 static constexpr int32_t SCREEN_H = 240;
 static constexpr int32_t HALF_SCREEN_W = SCREEN_W / 2;
 static constexpr int32_t HALF_SCREEN_H = SCREEN_H / 2;
-static constexpr int32_t VIEW_3D_H = 200;
-static constexpr int32_t HALF_VIEW_3D_H = VIEW_3D_H / 2;
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Height of the 3D view, and half of it (where the horizon sits).
+//
+// On the PlayStation this never changed: 200 rows of world with the 40 row status bar underneath. PsyDoom 3DS can put
+// the status bar on the touch screen instead, which frees those 40 rows for the world, so here it is a variable.
+//
+// This mirrors vanilla Doom's screen size mechanism, where 'viewheight' and 'centery' change with 'screenblocks' and
+// 'R_ExecuteSetViewSize' rebuilds the tables that depend on them. Growing the view moves the horizon down and reveals
+// more of the world below it, and more of the player's weapon, exactly as taking vanilla to its largest screen size
+// does. Call 'R_SetViewHeight' after changing it.
+//------------------------------------------------------------------------------------------------------------------------------------------
+static constexpr int32_t BASE_VIEW_3D_H = 200;          // What the PlayStation always used
+static constexpr int32_t MAX_VIEW_3D_H = SCREEN_H;      // The most it can ever be: the whole framebuffer
+
+#if PSYDOOM_3DS
+    extern int32_t gViewHeight;
+    extern int32_t gHalfViewHeight;
+#else
+    static constexpr int32_t gViewHeight = BASE_VIEW_3D_H;
+    static constexpr int32_t gHalfViewHeight = BASE_VIEW_3D_H / 2;
+#endif
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Alias for fixed point numbers in DOOM: mostly in 16.16 format but does not have to be
@@ -80,7 +99,7 @@ extern const angle_t gTanToAngle[SLOPERANGE + 1];           // +1 so we can hand
 
 // Provides a multiplier for a screen y coordinate.
 // When multiplied against a plane/flat z-height, yields the distance away that a particular flat span is.
-extern const fixed_t gYSlope[VIEW_3D_H];
+extern fixed_t gYSlope[MAX_VIEW_3D_H];
 
 // Maximum number of players in a multiplayer game
 static constexpr int32_t MAXPLAYERS = 2;

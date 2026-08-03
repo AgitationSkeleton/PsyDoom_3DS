@@ -73,7 +73,9 @@ add_common_target_compile_options(${LUA_TGT_NAME})
 include_directories(${SRC_DIR})
 target_include_directories(${LUA_TGT_NAME} INTERFACE ${SRC_DIR})
 
-if (NOT PLATFORM_WINDOWS)
+if (PLATFORM_3DS)
+    target_compile_definitions(${LUA_TGT_NAME} PUBLIC LUA_C89_NUMBERS=1)
+elseif (NOT PLATFORM_WINDOWS)
     # Fix GCC warning: the use of `tmpnam' is dangerous, better use `mkstemp'
-    target_compile_definitions(${LUA_TGT_NAME} PRIVATE -DLUA_USE_POSIX)
+    target_compile_definitions(${LUA_TGT_NAME} PRIVATE LUA_USE_POSIX)
 endif()

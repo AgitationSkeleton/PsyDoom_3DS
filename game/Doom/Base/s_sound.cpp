@@ -1,4 +1,4 @@
-#include "s_sound.h"
+﻿#include "s_sound.h"
 
 #include "Doom/cdmaptbl.h"
 #include "Doom/Game/doomdata.h"
@@ -216,7 +216,7 @@ void S_SetMusicVolume(const int32_t musVol) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 CdFileId S_GetMusicLcdFileId(const int32_t trackNum) noexcept {
     char lcdFileName[32];
-    std::sprintf(lcdFileName, "MUSLEV%d.LCD", trackNum);
+    std::sprintf(lcdFileName, "MUSLEV%d.LCD", static_cast<int>(trackNum));
     return lcdFileName;
 }
 
@@ -225,7 +225,7 @@ CdFileId S_GetMusicLcdFileId(const int32_t trackNum) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 CdFileId S_GetSoundLcdFileId(const int32_t num) noexcept {
     char lcdFileName[32];
-    std::sprintf(lcdFileName, "MAP%02d.LCD", num);
+    std::sprintf(lcdFileName, "MAP%02d.LCD", static_cast<int>(num));
     return lcdFileName;
 }
 
@@ -802,3 +802,4 @@ void PsxSoundInit(const int32_t sfxVol, const int32_t musVol, void* const pTmpWm
 void PsxSoundExit() noexcept {
     // Did nothing - not required for a PS1 game...
 }
+

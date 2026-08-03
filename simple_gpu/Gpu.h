@@ -260,7 +260,54 @@ struct Core {
     uint16_t        clutCacheX;
     uint16_t        clutCacheY;
     Color16         clutCache[256];
+
+#if PSYDOOM_3DS
+    //----------------------------------------------------------------------------------------------------------------
+    // PsyDoom 3DS: cached texel address tables for the 8bpp wall and floor fast paths.
+    //
+    // Turning a texture coordinate into a VRAM address means masking to the texture window, offsetting into it, halving
+    // the x (two 8bpp texels per 16-bit word), masking to the texture page, offsetting again, and finally a multiply by
+    // the VRAM width. That is a dozen operations per pixel, and a floor span pays it on both coordinates.
+    //
+    // But the texture window is at most a few hundred texels wide, so there are only that many distinct answers. These
+    // tables hold them, rebuilt only when the window or page actually changes - which is per texture, not per pixel.
+    //----------------------------------------------------------------------------------------------------------------
+    static constexpr uint32_t TEX_ADDR_CACHE_SIZE = 256;
+
+    uint16_t        texAddrCacheU[TEX_ADDR_CACHE_SIZE];         // Masked 'u' -> x offset of the containing 16-bit word
+    uint8_t         texAddrCacheUShift[TEX_ADDR_CACHE_SIZE];    // Masked 'u' -> shift to pull the CLUT index out of it
+    uint32_t        texAddrCacheV[TEX_ADDR_CACHE_SIZE];         // Masked 'v' -> offset of the VRAM row
+    bool            bTexAddrCacheValid;
+
+    uint16_t        texAddrCacheWinX;
+    uint16_t        texAddrCacheWinY;
+    uint16_t        texAddrCacheWinXMask;
+    uint16_t        texAddrCacheWinYMask;
+    uint16_t        texAddrCachePageX;
+    uint16_t        texAddrCachePageY;
+    uint16_t        texAddrCachePageXMask;
+    uint16_t        texAddrCachePageYMask;
+#endif
 };
+
+#if PSYDOOM_3DS
+    //----------------------------------------------------------------------------------------------------------------------
+    // PsyDoom 3DS: low detail controls for the classic renderer's wall and floor fast paths.
+    //
+    // The ARM11 cannot shade every pixel of a 256x240 frame at the game's 15 Hz cadence, so these allow whole pixels to be
+    // skipped and replicated instead. 'gPixelStepX' rasterizes every Nth screen column and replicates the shaded pixel over
+    // the columns that were skipped; 'gPixelStepY' does the same for the rows of a wall column. Both are '1' for full detail.
+    //
+    // Only the wall/floor primitives honor these; sprites, UI and the status bar always render at full detail.
+    //----------------------------------------------------------------------------------------------------------------------
+    extern int32_t gPixelStepX;
+    extern int32_t gPixelStepY;
+
+    static constexpr int32_t MAX_PIXEL_STEP_X = 3;
+    static constexpr int32_t MAX_PIXEL_STEP_Y = 2;
+
+    void setLowDetailSteps(const int32_t stepX, const int32_t stepY) noexcept;
+#endif
 
 // Initializing and shutting down a core
 void initCore(Core& core, const uint16_t ramPixelW, const uint16_t ramPixelH) noexcept;
@@ -273,6 +320,12 @@ Color16 readTexel(Core& core, const uint16_t coordX, const uint16_t coordY) noex
 
 // Miscellaneous
 void updateClutCache(Core& core) noexcept;
+
+#if PSYDOOM_3DS
+    // Brings the texel address tables up to date for the current texture window and page.
+    // Returns false if the window is too large to tabulate, in which case the caller must compute addresses the long way.
+    bool updateTexAddrCache(Core& core) noexcept;
+#endif
 bool isPixelInDrawArea(const Core& core, const uint16_t x, const uint16_t y) noexcept;
 void clearRect(Core& core, const Color16 color, const uint16_t x, const uint16_t y, const uint16_t w, const uint16_t h) noexcept;
 

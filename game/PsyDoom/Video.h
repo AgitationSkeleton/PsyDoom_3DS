@@ -47,6 +47,11 @@ void getClassicFramebufferWindowRect(
 ) noexcept;
 
 void displayFramebuffer() noexcept;
+
+#if PSYDOOM_3DS
+    // Stereoscopic 3D: bank the eye that has just been rendered onto the top screen, without swapping
+    void presentTopScreenOnly() noexcept;
+#endif
 bool isUsingVulkanRenderPath() noexcept;
 IVideoBackend& getCurrentBackend() noexcept;
 

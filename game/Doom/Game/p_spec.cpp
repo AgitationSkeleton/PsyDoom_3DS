@@ -1,4 +1,4 @@
-#include "p_spec.h"
+﻿#include "p_spec.h"
 
 #include "Asserts.h"
 #include "Doom/Base/i_main.h"
@@ -1274,7 +1274,7 @@ void P_PlayerInSpecialSector(player_t& player) noexcept {
         default: {
             // PsyDoom: issue a warning rather than a fatal error if encountering a bad sector special
             #if PSYDOOM_MODS
-                std::snprintf(gLevelStartupWarning, C_ARRAY_SIZE(gLevelStartupWarning), "W:bad sector special %d!", sector.special);
+                std::snprintf(gLevelStartupWarning, C_ARRAY_SIZE(gLevelStartupWarning), "W:bad sector special %d!", static_cast<int>(sector.special));
                 gStatusBar.message = gLevelStartupWarning;
                 gStatusBar.messageTicsLeft = 60;
             #else
@@ -1712,3 +1712,4 @@ void P_SpawnSpecials() noexcept {
         D_memset(gButtonList, std::byte(0), MAXBUTTONS * sizeof(gButtonList[0]));
     #endif
 }
+

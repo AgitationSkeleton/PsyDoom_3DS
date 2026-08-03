@@ -122,7 +122,9 @@
 /*
 @@ LUA_32BITS enables Lua with 32-bit integers and 32-bit floats.
 */
+#if !defined(LUA_32BITS)
 #define LUA_32BITS	0
+#endif
 
 
 /*
@@ -130,10 +132,12 @@
 ** C89 ('long' and 'double'); Windows always has '__int64', so it does
 ** not need to use this case.
 */
+#if !defined(LUA_C89_NUMBERS)
 #if defined(LUA_USE_C89) && !defined(LUA_USE_WINDOWS)
 #define LUA_C89_NUMBERS		1
 #else
 #define LUA_C89_NUMBERS		0
+#endif
 #endif
 
 

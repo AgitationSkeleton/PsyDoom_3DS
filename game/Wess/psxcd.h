@@ -55,6 +55,11 @@ struct PsxCd_MapTblEntry {
     }
 };
 
+#if PSYDOOM_3DS
+    // PsyDoom 3DS: reads CD audio ahead into memory. Main thread only: this touches the SD card.
+    void psxcd_update_audio_buffer() noexcept;
+#endif
+
 void psxcd_init() noexcept;
 void psxcd_exit() noexcept;
 PsxCd_File* psxcd_open(const CdFileId discFile) noexcept;

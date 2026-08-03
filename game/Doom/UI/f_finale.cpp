@@ -24,6 +24,9 @@
 #include "PsyDoom/MapInfo/MapInfo.h"
 #include "PsyDoom/PsxPadButtons.h"
 #include "PsyDoom/Utils.h"
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+#endif
 #include "PsyDoom/Video.h"
 #include "PsyDoom/Vulkan/VDrawing.h"
 #include "PsyDoom/Vulkan/VRenderer.h"
@@ -385,6 +388,10 @@ void F1_Drawer() noexcept {
 
     #if PSYDOOM_MODS
         Utils::onBeginUIDrawing();  // PsyDoom: UI drawing setup for the new Vulkan renderer
+
+        #if PSYDOOM_3DS
+            Screens3DS::setBottomScreen(Screens3DS::BottomScreen::BackgroundOnly);
+        #endif
     #endif
 
     // PsyDoom: the background for the finale can now be anything as it is sourced from MAPINFO.
@@ -450,6 +457,20 @@ void F1_Drawer() noexcept {
     // PsyDoom: draw any enabled performance counters
     #if PSYDOOM_MODS
         I_DrawEnabledPerfCounters();
+    #endif
+
+    // PsyDoom 3DS: the top screen carries the finished screen; the touch screen gets a second pass over just this
+    // screen's background, so each display has a whole image of its own rather than sharing one.
+    #if PSYDOOM_3DS
+        I_SubmitGpuCmds();
+        Video::presentTopScreenOnly();
+        Screens3DS::setTopScreenAlreadyDrawn(true);
+
+        #if PSYDOOM_MODS
+            I_CacheAndDrawBackgroundSprite(gFinaleBgTex, R_GetPaletteClutId(gpCluster->picPal));
+        #else
+            I_CacheAndDrawBackgroundSprite(gTex_BACK, Game::getTexClut_BACK());
+        #endif
     #endif
 
     // Finish up the frame
@@ -796,6 +817,10 @@ void F2_Drawer() noexcept {
 
     #if PSYDOOM_MODS
         Utils::onBeginUIDrawing();  // PsyDoom: UI drawing setup for the new Vulkan renderer
+
+        #if PSYDOOM_3DS
+            Screens3DS::setBottomScreen(Screens3DS::BottomScreen::BackgroundOnly);
+        #endif
     #endif
 
     // PsyDoom: the background for the finale can now be anything as it is sourced from MAPINFO
@@ -1011,6 +1036,20 @@ void F2_Drawer() noexcept {
     // PsyDoom: draw any enabled performance counters
     #if PSYDOOM_MODS
         I_DrawEnabledPerfCounters();
+    #endif
+
+    // PsyDoom 3DS: the top screen carries the finished screen; the touch screen gets a second pass over just this
+    // screen's background, so each display has a whole image of its own rather than sharing one.
+    #if PSYDOOM_3DS
+        I_SubmitGpuCmds();
+        Video::presentTopScreenOnly();
+        Screens3DS::setTopScreenAlreadyDrawn(true);
+
+        #if PSYDOOM_MODS
+            I_CacheAndDrawBackgroundSprite(gFinaleBgTex, R_GetPaletteClutId(gpCluster->picPal));
+        #else
+            I_CacheAndDrawBackgroundSprite(gTex_DEMON, gPaletteClutIds[MAINPAL]);
+        #endif
     #endif
 
     // Finish up the frame

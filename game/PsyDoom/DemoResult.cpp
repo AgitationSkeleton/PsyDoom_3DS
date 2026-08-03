@@ -47,7 +47,7 @@ template <class T>
 static bool verifyJsonFieldMatches(const rapidjson::Value& jsonObj, const char* const fieldName, const T expectedVal) noexcept {
     const rapidjson::Value& field = getJsonFieldOrNull(jsonObj, fieldName);
 
-    if ((!field.Is<T>()) || (field.Get<T>() != expectedVal))
+    if ((!field.IsInt64()) || (field.GetInt64() != (int64_t) expectedVal))
         return false;
 
     return true;
@@ -71,7 +71,7 @@ static bool verifyJsonArrayFieldMatches(
     for (unsigned i = 0; i < arraySize; ++i) {
         const rapidjson::Value& arrayValue = field[i];
 
-        if ((!arrayValue.Is<JsonT>()) || ((CppT) arrayValue.Get<JsonT>() != expectedValues[i])) {
+        if ((!arrayValue.IsInt64()) || ((CppT) arrayValue.GetInt64() != expectedValues[i])) {
             return false;
         }
     }
@@ -93,26 +93,26 @@ static void addPlayerToJson(
 
     {
         mobj_t& mobj = *player.mo;
-        playerJson.AddMember("x", mobj.x, jsonAllocator);
-        playerJson.AddMember("y", mobj.y, jsonAllocator);
-        playerJson.AddMember("z", mobj.z, jsonAllocator);
-        playerJson.AddMember("angle", mobj.angle, jsonAllocator);
-        playerJson.AddMember("momx", mobj.momx, jsonAllocator);
-        playerJson.AddMember("momy", mobj.momy, jsonAllocator);
-        playerJson.AddMember("momz", mobj.momz, jsonAllocator);
+        playerJson.AddMember("x", (int) mobj.x.value, jsonAllocator);
+        playerJson.AddMember("y", (int) mobj.y.value, jsonAllocator);
+        playerJson.AddMember("z", (int) mobj.z.value, jsonAllocator);
+        playerJson.AddMember("angle", (unsigned) mobj.angle, jsonAllocator);
+        playerJson.AddMember("momx", (int) mobj.momx, jsonAllocator);
+        playerJson.AddMember("momy", (int) mobj.momy, jsonAllocator);
+        playerJson.AddMember("momz", (int) mobj.momz, jsonAllocator);
     }
 
     // Health and armor
-    playerJson.AddMember("health", player.health, jsonAllocator);
-    playerJson.AddMember("armorpoints", player.armorpoints, jsonAllocator);
-    playerJson.AddMember("armortype", player.armortype, jsonAllocator);
+    playerJson.AddMember("health", (int) player.health, jsonAllocator);
+    playerJson.AddMember("armorpoints", (int) player.armorpoints, jsonAllocator);
+    playerJson.AddMember("armortype", (int) player.armortype, jsonAllocator);
 
     // How long left for each power
     {
         rapidjson::Value powersJson(rapidjson::kArrayType);
 
         for (int32_t i = 0; i < NUMPOWERS; ++i) {
-            powersJson.PushBack(player.powers[i], jsonAllocator);
+            powersJson.PushBack((int) player.powers[i], jsonAllocator);
         }
 
         playerJson.AddMember("powers", powersJson, jsonAllocator);
@@ -123,22 +123,22 @@ static void addPlayerToJson(
         rapidjson::Value cardsJson(rapidjson::kArrayType);
 
         for (int32_t i = 0; i < NUMCARDS; ++i) {
-            cardsJson.PushBack((int32_t) player.cards[i], jsonAllocator);   // N.B: serialize as int
+            cardsJson.PushBack((int) player.cards[i], jsonAllocator);   // N.B: serialize as int
         }
 
         playerJson.AddMember("cards", cardsJson, jsonAllocator);
     }
 
     // Backpack ownership and equipped weapon
-    playerJson.AddMember("backpack", (int32_t) player.backpack, jsonAllocator);     // N.B: serialize as int
-    playerJson.AddMember("readyweapon", player.readyweapon, jsonAllocator);
+    playerJson.AddMember("backpack", (int) player.backpack, jsonAllocator);     // N.B: serialize as int
+    playerJson.AddMember("readyweapon", (int) player.readyweapon, jsonAllocator);
 
     // Which weapons are owned
     {
         rapidjson::Value weaponownedJson(rapidjson::kArrayType);
 
         for (int32_t i = 0; i < NUMWEAPONS; ++i) {
-            weaponownedJson.PushBack((int32_t) player.weaponowned[i], jsonAllocator);   // N.B: serialize as int
+            weaponownedJson.PushBack((int) player.weaponowned[i], jsonAllocator);   // N.B: serialize as int
         }
 
         playerJson.AddMember("weaponowned", weaponownedJson, jsonAllocator);
@@ -149,19 +149,19 @@ static void addPlayerToJson(
         rapidjson::Value ammoJson(rapidjson::kArrayType);
 
         for (int32_t i = 0; i < NUMAMMO; ++i) {
-            ammoJson.PushBack(player.ammo[i], jsonAllocator);
+            ammoJson.PushBack((int) player.ammo[i], jsonAllocator);
         }
 
         playerJson.AddMember("ammo", ammoJson, jsonAllocator);
     }
 
     // Level stats
-    playerJson.AddMember("killcount", player.killcount, jsonAllocator);
-    playerJson.AddMember("itemcount", player.itemcount, jsonAllocator);
-    playerJson.AddMember("secretcount", player.secretcount, jsonAllocator);
+    playerJson.AddMember("killcount", (int) player.killcount, jsonAllocator);
+    playerJson.AddMember("itemcount", (int) player.itemcount, jsonAllocator);
+    playerJson.AddMember("secretcount", (int) player.secretcount, jsonAllocator);
 
     if (gNetGame == gt_deathmatch) {
-        playerJson.AddMember("frags", player.frags, jsonAllocator);
+        playerJson.AddMember("frags", (int) player.frags, jsonAllocator);
     }
 
     // Add the player to the document

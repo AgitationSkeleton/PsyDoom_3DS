@@ -421,7 +421,7 @@ static std::unique_ptr<char[]> readMapInfoLumpAsCString() noexcept {
     if (lumpNum < 0)
         return {};
 
-    const int32_t lumpSize = std::max(W_LumpLength(lumpNum), 0);
+    const int32_t lumpSize = std::max<int32_t>(W_LumpLength(lumpNum), 0);
     std::unique_ptr<char[]> lumpCString(new char[lumpSize + 1]);
     W_ReadLump(lumpNum, lumpCString.get(), true);
     lumpCString[lumpSize] = 0;

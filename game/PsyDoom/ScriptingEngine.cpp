@@ -1,4 +1,4 @@
-//------------------------------------------------------------------------------------------------------------------------------------------
+﻿//------------------------------------------------------------------------------------------------------------------------------------------
 // Manages the Lua scripting engine that new PsyDoom levels can use to execute more advanced line actions with.
 // The scripting capabilities are limited, and just extend to offering a little more control like 'Macros' in the original Doom 64 engine.
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -366,17 +366,17 @@ bool doAction(
 
             if (!result.valid()) {
                 const sol::error error = result;
-                showStatusBarError("Script #%d error! See stdout.", actionNum);
-                std::printf("PsyDoom: error executing map script action #%d! Details follow:\n%s\n", actionNum, error.what());
+                showStatusBarError("Script #%d error! See stdout.", static_cast<int>(actionNum));
+                std::printf("PsyDoom: error executing map script action #%d! Details follow:\n%s\n", static_cast<int>(actionNum), error.what());
             }
         }
         catch (const std::exception& e) {
-            showStatusBarError("Script #%d error! See stdout.", actionNum);
-            std::printf("PsyDoom: error executing map script action #%d! Details follow:\n%s\n", actionNum, e.what());
+            showStatusBarError("Script #%d error! See stdout.", static_cast<int>(actionNum));
+            std::printf("PsyDoom: error executing map script action #%d! Details follow:\n%s\n", static_cast<int>(actionNum), e.what());
         }
     } else {
-        showStatusBarError("No script action #%d!", actionNum);
-        std::printf("PsyDoom: no scripting action #%d is available to execute!\n", actionNum);
+        showStatusBarError("No script action #%d!", static_cast<int>(actionNum));
+        std::printf("PsyDoom: no scripting action #%d is available to execute!\n", static_cast<int>(actionNum));
     }
 
     const bool bWasActionAllowed = gbCurActionAllowed;
@@ -411,7 +411,7 @@ void scheduleAction(
 ) noexcept {
     ScheduledAction& action = allocScheduledAction();
     action.actionNum = actionNum;
-    action.delayTics = std::max(delayTics, 0);
+    action.delayTics = std::max<int32_t>(delayTics, 0);
     action.executionsLeft = 1;
     action.tag = tag;
     action.userdata = userdata;
@@ -431,9 +431,9 @@ void scheduleRepeatingAction(
 ) noexcept {
     ScheduledAction& action = allocScheduledAction();
     action.actionNum = actionNum;
-    action.delayTics = std::max(initialDelayTics, 0);
+    action.delayTics = std::max<int32_t>(initialDelayTics, 0);
     action.executionsLeft = (numRepeats < 0) ? -1 : numRepeats + 1;    // Note: use '-1' always for infinite
-    action.repeatDelay = std::max(repeatDelay, 0);
+    action.repeatDelay = std::max<int32_t>(repeatDelay, 0);
     action.tag = tag;
     action.userdata = userdata;
 }
@@ -503,3 +503,4 @@ int32_t getNumScheduledActionsWithTag(const int32_t tag) noexcept {
 }
 
 END_NAMESPACE(ScriptingEngine)
+

@@ -22,6 +22,9 @@
 #include "FileOutputStream.h"
 #include "FileUtils.h"
 #include "m_main.h"
+#if PSYDOOM_3DS
+    #include "menu3ds.h"
+#endif
 #include "o_main.h"
 #include "PsyDoom/Game.h"
 #include "PsyDoom/SaveAndLoad.h"
@@ -36,16 +39,24 @@
 #include <algorithm>
 #include <chrono>
 
-// The available menu items
+// The available menu items.
+//
+// PsyDoom 3DS: no quicksave slot. Nothing is bound to quicksave on this platform and nothing can be, so the slot could
+// only ever sit there empty; leaving it out gives the remaining slots and the 'Back' option room to breathe.
 enum MenuItem : int32_t {
     menu_slot1,
     menu_slot2,
     menu_slot3,
+#if !PSYDOOM_3DS
     menu_slotQ,
+#endif
     menu_slotA,
     menu_back,
     num_menu_items
 };
+
+// How many save slots the menu shows
+static constexpr int32_t NUM_SHOWN_SAVE_SLOTS = menu_back - menu_slot1;
 
 // Represents a save slot
 struct SaveFileInfo {
@@ -63,6 +74,18 @@ struct SaveSlotMapName {
     static constexpr uint32_t MAX_DISPLAY_CHARS = 25;
     char chars[MAX_DISPLAY_CHARS + 1];
 };
+
+// Where the save slots start and how far apart they sit, and where the 'Back' option goes underneath them.
+// On 3DS there is one slot fewer and everything has to stay inside the rows the touch screen presents.
+#if PSYDOOM_3DS
+    static constexpr int16_t SAVE_SLOT_FIRST_Y = 30;
+    static constexpr int16_t SAVE_SLOT_SPACING = 38;
+    static constexpr int16_t LOADSAVE_BACK_Y = 194;
+#else
+    static constexpr int16_t SAVE_SLOT_FIRST_Y = 30;
+    static constexpr int16_t SAVE_SLOT_SPACING = 35;
+    static constexpr int16_t LOADSAVE_BACK_Y = 211;
+#endif
 
 static LoadSaveMenuMode     gMenuMode;                  // What mode the menu is operating in
 static uint8_t              gSlotHighlightPhase;        // Current phase for the slot highlight effect
@@ -271,6 +294,11 @@ void LoadSave_SetMode(const LoadSaveMenuMode mode) noexcept {
 void LoadSave_Init() noexcept {
     S_StartSound(nullptr, sfx_pistol);
 
+    // PsyDoom: cache the background here too, so this screen does not depend on how it was reached
+    #if PSYDOOM_MODS
+        I_LoadAndCacheTexLump(gTex_OptionsBg, Game::getTexLumpName_OptionsBg());
+    #endif
+
     // Initialize various menu things
     gCursorFrame = 0;
     gCursorPos[gCurPlayerIndex] = 0;
@@ -284,8 +312,16 @@ void LoadSave_Init() noexcept {
     gSaveFiles[0].label = '1';  gSaveFiles[0].slot = SaveFileSlot::SAVE1;
     gSaveFiles[1].label = '2';  gSaveFiles[1].slot = SaveFileSlot::SAVE2;
     gSaveFiles[2].label = '3';  gSaveFiles[2].slot = SaveFileSlot::SAVE3;
+
+    // Note: the menu works out which save file a row is by counting from the first slot, so the ones it shows have to
+    // come first. The quicksave slot is not shown on 3DS, so it goes last there rather than being left in the middle.
+#if PSYDOOM_3DS
+    gSaveFiles[3].label = 'a';  gSaveFiles[3].slot = SaveFileSlot::AUTOSAVE;
+    gSaveFiles[4].label = 'q';  gSaveFiles[4].slot = SaveFileSlot::QUICKSAVE;
+#else
     gSaveFiles[3].label = 'q';  gSaveFiles[3].slot = SaveFileSlot::QUICKSAVE;
     gSaveFiles[4].label = 'a';  gSaveFiles[4].slot = SaveFileSlot::AUTOSAVE;
+#endif
 
     // Read the headers for each save
     for (SaveFileInfo& save : gSaveFiles) {
@@ -414,7 +450,9 @@ gameaction_t LoadSave_Update() noexcept {
             case menu_slot1:
             case menu_slot2:
             case menu_slot3:
+        #if !PSYDOOM_3DS
             case menu_slotQ:
+        #endif
             case menu_slotA: {
                 if (bMenuOk) {
                     // If loading then only allow focusing the slot if it's not empty
@@ -459,6 +497,15 @@ void LoadSave_Draw() noexcept {
     I_IncDrawnFrameCount();
     Utils::onBeginUIDrawing();
 
+    // PsyDoom 3DS: the title goes on the top screen, on a background of its own
+    #if PSYDOOM_3DS
+        Menu3DS_DrawTitleScreen(
+            gTex_OptionsBg,
+            Game::getTexClut_OptionsBg(),
+            (gMenuMode == LoadSaveMenuMode::Load) ? "Load Game" : "Save Game"
+        );
+    #endif
+
     // Draw the background
     const bool bSaveSlotFocused = IsSaveSlotFocused();
     const uint8_t colRGB = (bSaveSlotFocused) ? 64 : 128;
@@ -471,19 +518,20 @@ void LoadSave_Draw() noexcept {
         return (bOutOfFocus || bInvalidLoadSlot);
     };
 
-    DrawSaveSlot(gSaveFiles[0], 21, 30, (gFocusedSaveSlot == 0), doDimSlot(0));
-    DrawSaveSlot(gSaveFiles[1], 21, 65, (gFocusedSaveSlot == 1), doDimSlot(1));
-    DrawSaveSlot(gSaveFiles[2], 21, 100, (gFocusedSaveSlot == 2), doDimSlot(2));
-    DrawSaveSlot(gSaveFiles[3], 21, 135, (gFocusedSaveSlot == 3), doDimSlot(3));
-    DrawSaveSlot(gSaveFiles[4], 21, 170, (gFocusedSaveSlot == 4), doDimSlot(4));
+    for (int32_t i = 0; i < NUM_SHOWN_SAVE_SLOTS; ++i) {
+        DrawSaveSlot(gSaveFiles[i], 21, (int16_t)(SAVE_SLOT_FIRST_Y + i * SAVE_SLOT_SPACING), (gFocusedSaveSlot == i), doDimSlot(i));
+    }
 
     // Don't do any rendering if we are about to exit the menu
     if (gGameAction == ga_nothing) {
-        // Menu title and back option
-        I_DrawString(-1, 8, (gMenuMode == LoadSaveMenuMode::Load) ? "Load Game" : "Save Game");
+        // Menu title and back option.
+        // PsyDoom 3DS: the title is on the top screen, and 'Back' is pulled up into the rows the touch screen shows.
+        #if !PSYDOOM_3DS
+            I_DrawString(-1, 8, (gMenuMode == LoadSaveMenuMode::Load) ? "Load Game" : "Save Game");
+        #endif
 
         if (gFocusedSaveSlot < 0) {
-            I_DrawString(-1, 211, "Back");
+            I_DrawString(-1, LOADSAVE_BACK_Y, "Back");
         }
 
         // Draw the skull cursor (only if there isn't a save slot focused)
@@ -492,16 +540,14 @@ void LoadSave_Draw() noexcept {
             int16_t cursorX = 2;
             int16_t cursorY = 75;
 
-            switch (curMenuOption) {
-                case menu_slot1: cursorY = 36;  break;
-                case menu_slot2: cursorY = 71;  break;
-                case menu_slot3: cursorY = 106; break;
-                case menu_slotQ: cursorY = 141; break;
-                case menu_slotA: cursorY = 176; break;
+            if ((curMenuOption >= menu_slot1) && (curMenuOption < menu_back)) {
+                cursorY = (int16_t)(SAVE_SLOT_FIRST_Y + (curMenuOption - menu_slot1) * SAVE_SLOT_SPACING + 6);
+            }
 
+            switch (curMenuOption) {
                 case menu_back:
                     cursorX = 80;
-                    cursorY = 209;
+                    cursorY = LOADSAVE_BACK_Y - 2;
                     break;
             }
 

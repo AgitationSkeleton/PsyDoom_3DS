@@ -1,4 +1,4 @@
-#include "ConfigSerialization_Input.h"
+﻿#include "ConfigSerialization_Input.h"
 
 #include "Config.h"
 #include "IniUtils.h"
@@ -20,12 +20,16 @@ Config_Input gConfig_Input = {};
 void initCfgSerialization_Input() noexcept {
     auto& cfg = gConfig_Input;
 
+#if !PSYDOOM_3DS
     cfg.mouseTurnSpeed = makeConfigField(
         "MouseTurnSpeed",
         "How much turning movement to apply per pixel of mouse movement",
         gMouseTurnSpeed,
         7.0f
     );
+#else
+    gMouseTurnSpeed = 0.0f;
+#endif
 
     cfg.gamepadDeadZone = makeConfigField(
         "GamepadDeadZone",
@@ -86,3 +90,4 @@ void initCfgSerialization_Input() noexcept {
 }
 
 END_NAMESPACE(ConfigSerialization)
+

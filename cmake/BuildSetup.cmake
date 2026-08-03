@@ -11,7 +11,9 @@ macro(detect_compiler)
 endmacro()
 
 macro(detect_platform)
-    if (WIN32)
+    if (CMAKE_SYSTEM_NAME STREQUAL "Nintendo3DS")
+        set(PLATFORM_3DS TRUE)
+    elseif (WIN32)
         set(PLATFORM_WINDOWS TRUE)
 
         if ("${CMAKE_GENERATOR_PLATFORM}" STREQUAL "Win64")

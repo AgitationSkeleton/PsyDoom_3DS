@@ -14,11 +14,20 @@
 #include "Doom/RendererVk/rv_automap.h"
 #include "PsyDoom/Config/Config.h"
 #include "PsyDoom/PlayerPrefs.h"
+
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+
+    #include <chrono>
+#endif
 #include "PsyDoom/PsxPadButtons.h"
 #include "PsyDoom/Utils.h"
 #include "PsyDoom/Video.h"
 #include "PsyQ/LIBETC.h"
 #include "PsyQ/LIBGPU.h"
+
+#include <algorithm>
+#include <cstdlib>
 
 static constexpr fixed_t MOVESTEP   = FRACUNIT * 128;   // Controls how fast manual automap movement happens
 static constexpr fixed_t SCALESTEP  = 2;                // How fast to scale in/out
@@ -32,6 +41,11 @@ static fixed_t  gAutomapYMax;
 
 // Internal module functions
 static void DrawLine(const uint32_t color, const int32_t x1, const int32_t y1, const int32_t x2, const int32_t y2) noexcept;
+
+#if PSYDOOM_3DS
+    static AMExternalLineDrawer gpExternalLineDrawer = nullptr;
+    static void* gpExternalLineDrawerUserData = nullptr;
+#endif
 
 #if PSYDOOM_MODS
 
@@ -83,6 +97,104 @@ void AM_Start() noexcept {
     gAutomapYMax = d_lshift<MAPBLOCKSHIFT>(gBlockmapHeight) + gBlockmapOriginY;
 }
 
+#if PSYDOOM_3DS
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: drag the automap around with the stylus.
+//
+// The touch screen shows the automap the whole time the player is in a level, so panning it with a held button and the
+// D-Pad, as the PlayStation version did, would waste buttons that gameplay needs. Dragging is the obvious gesture on a
+// touch screen. It snaps back to the player once they have actually walked somewhere, so the map cannot be left
+// stranded somewhere unhelpful.
+//
+// "Actually walked" rather than "moved at all": movement is on an analog stick, and a stick at rest still reports a
+// little of something, so the player's position is never perfectly still. Snapping back on any change at all meant the
+// map returned to the player the instant the stylus lifted, every time, which looked like panning was broken.
+//
+// There was a deliberate snap back on a quick double tap as well, but a touch screen being dragged produces stray taps
+// constantly and it fired almost every time the map was touched. Walking snaps back on its own, so nothing is lost by
+// dropping it.
+//------------------------------------------------------------------------------------------------------------------------------------------
+static void AM_Update3DSTouchPan(player_t& player) noexcept {
+    // How the touch screen scales the automap's own coordinate space, as a fraction: it draws six pixels for every
+    // five units, the same in both directions. Panning has to undo exactly that to keep up with the stylus.
+    constexpr int64_t AUTOMAP_SCALE_NUM = 6;
+    constexpr int64_t AUTOMAP_SCALE_DEN = 5;
+
+    // How far the player has to travel from where the map was pulled away before it goes back to them.
+    // Comfortably more than an analog stick's drift, comfortably less than a step.
+    constexpr fixed_t SNAP_BACK_DIST = 48 * FRACUNIT;
+
+    static bool     bWasDown = false;
+    static int32_t  lastTouchX = 0;
+    static int32_t  lastTouchY = 0;
+    static fixed_t  panAnchorX = 0;     // Where the player was when the map was pulled away from them
+    static fixed_t  panAnchorY = 0;
+
+    const Screens3DS::Touch& touch = Screens3DS::getTouch();
+    const int32_t touchX = Screens3DS::getRawTouchX();
+    const int32_t touchY = Screens3DS::getRawTouchY();
+
+    // Once the player has walked away from where they were when the map was pulled off them, take it back
+    if (((player.automapflags & AF_FOLLOW) != 0) && (!touch.bDown)) {
+        const fixed_t movedX = std::abs(player.mo->x - panAnchorX);
+        const fixed_t movedY = std::abs(player.mo->y - panAnchorY);
+
+        if ((movedX > SNAP_BACK_DIST) || (movedY > SNAP_BACK_DIST)) {
+            player.automapflags &= ~AF_FOLLOW;
+        }
+    }
+
+    if (touch.bJustPressed) {
+        lastTouchX = touchX;
+        lastTouchY = touchY;
+        bWasDown = true;
+        return;
+    }
+
+    if (touch.bJustReleased) {
+        bWasDown = false;
+        return;
+    }
+
+    if ((!touch.bDown) || (!bWasDown))
+        return;
+
+    const int32_t dragX = touchX - lastTouchX;
+    const int32_t dragY = touchY - lastTouchY;
+    lastTouchX = touchX;
+    lastTouchY = touchY;
+
+    if ((dragX == 0) && (dragY == 0))
+        return;
+
+    // Starting a drag takes the map off the player; seed the free camera where the player currently is so the map does
+    // not jump before it starts moving
+    if ((player.automapflags & AF_FOLLOW) == 0) {
+        player.automapflags |= AF_FOLLOW;
+        player.automapx = player.mo->x;
+        player.automapy = player.mo->y;
+        panAnchorX = player.mo->x;
+        panAnchorY = player.mo->y;
+    }
+
+    // Undo the automap's world to screen transform to work out how far the world moved under the stylus.
+    //
+    // A line is drawn at 'screen = ((world - origin) / SCREEN_W) * scale >> FRACBITS', and the touch screen then draws
+    // that at six pixels per five units. Inverting both gives the world delta for one pixel of drag. This is done in
+    // 64 bits because the intermediate easily exceeds a 32 bit fixed_t.
+    const int32_t scale = std::max<int32_t>(player.automapscale, 1);
+    const int64_t dragMapX = ((int64_t) dragX * AUTOMAP_SCALE_DEN) / AUTOMAP_SCALE_NUM;
+    const int64_t dragMapY = -((int64_t) dragY * AUTOMAP_SCALE_DEN) / AUTOMAP_SCALE_NUM;
+
+    // Dragging right should pull the map contents right, which means moving the camera left
+    player.automapx -= (fixed_t)((dragMapX * FRACUNIT * SCREEN_W) / scale);
+    player.automapy -= (fixed_t)((dragMapY * FRACUNIT * SCREEN_W) / scale);
+
+    player.automapx = std::clamp(player.automapx, gAutomapXMin, gAutomapXMax);
+    player.automapy = std::clamp(player.automapy, gAutomapYMin, gAutomapYMax);
+}
+#endif  // #if PSYDOOM_3DS
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Update logic for the automap: handles player input & controls
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -133,6 +245,15 @@ void AM_Control(player_t& player) noexcept {
         player.automapx = player.mo->x;
         player.automapy = player.mo->y;
     }
+
+    // PsyDoom 3DS: the touch screen shows the automap for the whole level, so stylus panning is handled before the
+    // check below, which only concerns the full screen automap
+    #if PSYDOOM_3DS
+        // Note: only for the player sitting in front of this console. In a netgame 'AM_Control' runs for both players.
+        if ((player.playerstate == PST_LIVE) && (gPlayerNum == gCurPlayerIndex)) {
+            AM_Update3DSTouchPan(player);
+        }
+    #endif
 
     // If the automap is not active or the player dead then do nothing
     if ((player.automapflags & AF_ACTIVE) == 0)
@@ -499,6 +620,18 @@ void AM_Drawer() noexcept {
     }
 }
 
+#if PSYDOOM_3DS
+void AM_DrawerToExternal(AMExternalLineDrawer const lineDrawer, void* const pUserData) noexcept {
+    gpExternalLineDrawer = lineDrawer;
+    gpExternalLineDrawerUserData = pUserData;
+
+    AM_Drawer();
+
+    gpExternalLineDrawer = nullptr;
+    gpExternalLineDrawerUserData = nullptr;
+}
+#endif
+
 #if PSYDOOM_MODS
 //------------------------------------------------------------------------------------------------------------------------------------------
 // PsyDoom specific helper: gets the color to draw the specified player in
@@ -573,6 +706,13 @@ static void DrawLine(const uint32_t color, const int32_t x1, const int32_t y1, c
 
     if (outcode1 & outcode2)
         return;
+
+#if PSYDOOM_3DS
+    if (gpExternalLineDrawer) {
+        gpExternalLineDrawer(gpExternalLineDrawerUserData, color, x1, y1, x2, y2);
+        return;
+    }
+#endif
 
     // Setup the map line primitive and draw it.
     //

@@ -227,7 +227,7 @@ static void P_PlayerZMovement(mobj_t& mobj) noexcept {
     // Clip height against the ceiling and kill upwards velocity if we're hitting it
     if (mobj.z + mobj.height > mobj.ceilingz) {
         mobj.z = mobj.ceilingz - mobj.height;
-        mobj.momz = std::min(mobj.momz, 0);
+        mobj.momz = std::min<fixed_t>(mobj.momz, 0);
     }
 }
 
@@ -624,7 +624,7 @@ static void P_CalcHeight(player_t& player) noexcept {
         // Gone down to low?
         if (player.viewheight < VIEWHEIGHT / 2) {
             player.viewheight = VIEWHEIGHT / 2;
-            player.deltaviewheight = std::max(player.deltaviewheight, 1);   // Start moving up
+            player.deltaviewheight = std::max<fixed_t>(player.deltaviewheight, 1);   // Start moving up
         }
 
         // If we are moving up still, accelerate the the movement over time

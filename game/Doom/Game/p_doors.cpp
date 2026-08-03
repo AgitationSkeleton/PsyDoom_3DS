@@ -52,7 +52,7 @@ void T_VerticalDoor(vldoor_t& door) noexcept {
             // Also make the condition check a little more resilent and handle negative numbers.
             #if PSYDOOM_MODS
                 const int32_t ticksToCountdown = (Game::gSettings.bTurboMode) ? 2 : 1;
-                door.topcountdown = std::max(door.topcountdown - ticksToCountdown, 0);
+                door.topcountdown = std::max<int32_t>(door.topcountdown - ticksToCountdown, 0);
 
                 if (door.topcountdown > 0)
                     break;
@@ -90,7 +90,7 @@ void T_VerticalDoor(vldoor_t& door) noexcept {
             // Also make the condition check a little more resilent and handle negative numbers.
             #if PSYDOOM_MODS
                 const int32_t ticksToCountdown = (Game::gSettings.bTurboMode) ? 2 : 1;
-                door.topcountdown = std::max(door.topcountdown - ticksToCountdown, 0);
+                door.topcountdown = std::max<int32_t>(door.topcountdown - ticksToCountdown, 0);
 
                 if (door.topcountdown > 0)
                     break;
@@ -548,7 +548,7 @@ void T_CustomDoor(vlcustomdoor_t& door) noexcept {
     // Handle a waiting door and tick the wait
     if (door.direction == 0) {
         const int32_t ticksToCountdown = (Game::gSettings.bTurboMode) ? 2 : 1;
-        door.countdown = std::max(door.countdown - ticksToCountdown, 0);
+        door.countdown = std::max<int32_t>(door.countdown - ticksToCountdown, 0);
 
         // Play the sound for the door opening or closing after the wait, then go into the next state
         if (door.countdown <= 0) {
@@ -630,7 +630,7 @@ bool EV_DoCustomDoor(sector_t& sector, const CustomDoorDef& def) noexcept {
 
     // Sanitize some of the script inputs
     door.def.speed = std::abs(door.def.speed);
-    door.def.waitTime = std::max(door.def.waitTime, 0);
+    door.def.waitTime = std::max<int32_t>(door.def.waitTime, 0);
 
     // Play the open or close sound and return 'true' for success
     PlayCustomDoorSound(door.def.bOpen ? door.def.openSound : door.def.closeSound, sector);

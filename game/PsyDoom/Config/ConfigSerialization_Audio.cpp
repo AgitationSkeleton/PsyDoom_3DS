@@ -38,6 +38,7 @@ void initCfgSerialization_Audio() noexcept {
         0
     );
 
+#if !PSYDOOM_3DS
     cfg.spuRamSize = makeConfigField(
         "SpuRamSize",
         "The size of available SPU RAM for loading sounds and sampled music instruments, in bytes.\n"
@@ -51,6 +52,11 @@ void initCfgSerialization_Audio() noexcept {
         gSpuRamSize,
         -1
     );
+#else
+    gSpuRamSize = 4 * 1024 * 1024;
+#endif
 }
 
 END_NAMESPACE(ConfigSerialization)
+
+

@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(PsyDoom)
 
+if (CMAKE_SYSTEM_NAME STREQUAL "Nintendo3DS")
+    set(PSYDOOM_INCLUDE_VULKAN_RENDERER FALSE CACHE BOOL "" FORCE)
+    set(PSYDOOM_INCLUDE_LAUNCHER FALSE CACHE BOOL "" FORCE)
+    set(PSYDOOM_INCLUDE_AUDIO_TOOLS FALSE CACHE BOOL "" FORCE)
+    set(PSYDOOM_INCLUDE_OTHER_TOOLS FALSE CACHE BOOL "" FORCE)
+    set(PSYDOOM_INCLUDE_REVERSING_TOOLS FALSE CACHE BOOL "" FORCE)
+endif()
+
 # Current game version string and version info
 set(GAME_VERSION_STR "1.1.1")
 set(GAME_VERSION_MAJOR 1)
@@ -21,6 +29,11 @@ include(HelperFunctions)
 include(BuildSetup)
 
 build_setup()
+
+if (PLATFORM_3DS)
+    add_compile_definitions(PSYDOOM_3DS=1)
+    add_compile_options(-O3 -fomit-frame-pointer)
+endif()
 
 # Global identifiers for each project/target
 set(ASIO_TGT_NAME                   Asio)
@@ -92,7 +105,11 @@ if (PSYDOOM_INCLUDE_GAME)
     add_subdirectory("${PROJECT_SOURCE_DIR}/game")
     add_subdirectory("${PROJECT_SOURCE_DIR}/simple_gpu")
     add_subdirectory("${PROJECT_SOURCE_DIR}/simple_spu")
-    add_subdirectory("${PROJECT_SOURCE_DIR}/third_party_libs/asio")
+    if (PLATFORM_3DS)
+        add_library(${ASIO_TGT_NAME} INTERFACE)
+    else()
+        add_subdirectory("${PROJECT_SOURCE_DIR}/third_party_libs/asio")
+    endif()
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party_libs/hash-library")
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party_libs/libsdl")
     add_subdirectory("${PROJECT_SOURCE_DIR}/third_party_libs/lua")

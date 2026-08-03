@@ -1,5 +1,9 @@
 #include "Input.h"
 
+#if PSYDOOM_3DS
+    #include "Screens3DS.h"
+#endif
+
 #include "GamepadInput.h"
 #include "Config/Config.h"
 #include "Doom/Game/p_tick.h"
@@ -222,6 +226,12 @@ static void updateJoystickHat(const JoyHat hat, const bool bPressed) noexcept {
 static void handleSdlEvents() noexcept {
     SDL_Event sdlEvent;
     bool bConsumeEvents = false;
+
+    // PsyDoom 3DS: sample the touch screen for this frame. Done here rather than through SDL's touch events because the
+    // 3DS layer presents the bottom screen itself and needs the raw hardware coordinates to map them back to the menu.
+    #if PSYDOOM_3DS
+        Screens3DS::updateTouch();
+    #endif
 
     while (SDL_PollEvent(&sdlEvent) != 0) {
         switch (sdlEvent.type) {
@@ -475,7 +485,9 @@ static void handleSdlEvents() noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 void init() noexcept {
     if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0) {
-        FatalErrors::raise("Failed to initialize the SDL joystick input subsystem!");
+        // Say what SDL actually complained about: on a console there is no terminal to fall back on, and the reason is
+        // usually a service the process was never granted rather than anything the player can act on blindly.
+        FatalErrors::raiseF("Failed to initialize the SDL joystick input subsystem!\nSDL error: %s", SDL_GetError());
     }
 
     SDL_GameControllerEventState(SDL_ENABLE);       // Want game controller events

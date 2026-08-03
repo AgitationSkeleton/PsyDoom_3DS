@@ -25,6 +25,12 @@ public:
     virtual void beginExternalSurfaceDisplay() noexcept override;
     virtual void endExternalSurfaceDisplay() noexcept override;
 
+    #if PSYDOOM_3DS
+        // Stereoscopic 3D: puts the current framebuffer on the top screen for the eye currently being rendered,
+        // without touching the bottom screen or swapping. Used to bank the first eye before the second is drawn.
+        void presentTopScreenOnly() noexcept;
+    #endif
+
     virtual void displayExternalSurface(
         IVideoSurface& surface,
         const int32_t displayX,
@@ -43,10 +49,25 @@ private:
     void copyPsxToSdlFramebufferTexture() noexcept;
     void presentSdlFramebufferTexture() noexcept;
 
+    #if PSYDOOM_3DS
+        void lockBottomFramebufferTexture() noexcept;
+        void unlockBottomFramebufferTexture() noexcept;
+        void updateBottomFramebufferTexture() noexcept;
+        void presentNativeFramebuffers() noexcept;
+        void presentBottomFramebufferTexture() noexcept;
+    #endif
+
     SDL_Window*     mpSdlWindow;            // The SDL window used
     SDL_Renderer*   mpRenderer;             // The SDL renderer used for blitting to the display
     SDL_Texture*    mpFramebufferTexture;   // A texture we populate for blitting to the display
     uint32_t*       mpFramebufferPixels;    // The pixels for framebuffer texture when locked for writing
+
+    #if PSYDOOM_3DS
+        SDL_Window*     mpBottomSdlWindow;
+        SDL_Renderer*   mpBottomRenderer;
+        SDL_Texture*    mpBottomFramebufferTexture;
+        uint32_t*       mpBottomFramebufferPixels;
+    #endif
 };
 
 END_NAMESPACE(Video)

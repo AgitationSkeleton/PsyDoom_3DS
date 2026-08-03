@@ -441,6 +441,38 @@ if (PLATFORM_LINUX)
     )
 endif()
 
+if (PLATFORM_3DS)
+    list(APPEND SOURCE_FILES
+        "${SRC_DIR}/audio/n3ds/SDL_n3dsaudio.c"
+        "${SRC_DIR}/file/n3ds/SDL_rwopsromfs.c"
+        "${SRC_DIR}/filesystem/n3ds/SDL_sysfilesystem.c"
+        "${SRC_DIR}/joystick/n3ds/SDL_sysjoystick.c"
+        "${SRC_DIR}/locale/n3ds/SDL_syslocale.c"
+        "${SRC_DIR}/main/n3ds/SDL_n3ds_main.c"
+        "${SRC_DIR}/power/n3ds/SDL_syspower.c"
+        "${SRC_DIR}/render/software/SDL_blendfillrect.c"
+        "${SRC_DIR}/render/software/SDL_blendline.c"
+        "${SRC_DIR}/render/software/SDL_blendpoint.c"
+        "${SRC_DIR}/render/software/SDL_drawline.c"
+        "${SRC_DIR}/render/software/SDL_drawpoint.c"
+        "${SRC_DIR}/render/software/SDL_render_sw.c"
+        "${SRC_DIR}/render/software/SDL_rotate.c"
+        "${SRC_DIR}/render/software/SDL_triangle.c"
+        "${SRC_DIR}/sensor/n3ds/SDL_n3dssensor.c"
+        "${SRC_DIR}/thread/generic/SDL_systls.c"
+        "${SRC_DIR}/thread/n3ds/SDL_syscond.c"
+        "${SRC_DIR}/thread/n3ds/SDL_sysmutex.c"
+        "${SRC_DIR}/thread/n3ds/SDL_syssem.c"
+        "${SRC_DIR}/thread/n3ds/SDL_systhread.c"
+        "${SRC_DIR}/timer/n3ds/SDL_systimer.c"
+        "${SRC_DIR}/video/n3ds/SDL_n3dsevents.c"
+        "${SRC_DIR}/video/n3ds/SDL_n3dsframebuffer.c"
+        "${SRC_DIR}/video/n3ds/SDL_n3dsswkb.c"
+        "${SRC_DIR}/video/n3ds/SDL_n3dstouch.c"
+        "${SRC_DIR}/video/n3ds/SDL_n3dsvideo.c"
+    )
+endif()
+
 add_library(${LIBSDL_TGT_NAME} ${SOURCE_FILES} ${OTHER_FILES})
 setup_source_groups("${SOURCE_FILES}" "${OTHER_FILES}")
 
@@ -514,6 +546,10 @@ if (PLATFORM_LINUX)
         Xrandr
         Xxf86vm
     )
+endif()
+
+if (PLATFORM_3DS)
+    target_link_libraries(${LIBSDL_TGT_NAME} ctru m)
 endif()
 
 if (COMPILER_CLANG OR COMPILER_GCC)

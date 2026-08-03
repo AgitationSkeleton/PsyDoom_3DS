@@ -7,6 +7,19 @@
 
 BEGIN_NAMESPACE(Gpu)
 
+#if PSYDOOM_3DS
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: current low detail steps for the wall/floor fast paths. Default to full detail.
+//------------------------------------------------------------------------------------------------------------------------------------------
+int32_t gPixelStepX = 1;
+int32_t gPixelStepY = 1;
+
+void setLowDetailSteps(const int32_t stepX, const int32_t stepY) noexcept {
+    gPixelStepX = std::clamp<int32_t>(stepX, 1, MAX_PIXEL_STEP_X);
+    gPixelStepY = std::clamp<int32_t>(stepY, 1, MAX_PIXEL_STEP_Y);
+}
+#endif
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Rounds the given number up to the next power of two if it's not a power of two
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -213,6 +226,69 @@ void updateClutCache(Core& core) noexcept {
     }
 }
 
+#if PSYDOOM_3DS
+//------------------------------------------------------------------------------------------------------------------------------------------
+// PsyDoom 3DS: rebuild the texel address tables if the texture window or page has changed since they were last built.
+// Returns false if the texture window is bigger than the tables can hold, which Doom's textures never are.
+//------------------------------------------------------------------------------------------------------------------------------------------
+bool updateTexAddrCache(Core& core) noexcept {
+    // The tables are indexed by the masked coordinate, so the mask has to fit. Bit 0 of the x mask must also be set,
+    // because the table's shift entry assumes masking leaves the low bit of 'u' alone.
+    if ((core.texWinXMask >= Core::TEX_ADDR_CACHE_SIZE) || (core.texWinYMask >= Core::TEX_ADDR_CACHE_SIZE))
+        return false;
+
+    if ((core.texWinXMask & 1) == 0)
+        return false;
+
+    const bool bStillValid = (
+        core.bTexAddrCacheValid &&
+        (core.texAddrCacheWinX == core.texWinX) &&
+        (core.texAddrCacheWinY == core.texWinY) &&
+        (core.texAddrCacheWinXMask == core.texWinXMask) &&
+        (core.texAddrCacheWinYMask == core.texWinYMask) &&
+        (core.texAddrCachePageX == core.texPageX) &&
+        (core.texAddrCachePageY == core.texPageY) &&
+        (core.texAddrCachePageXMask == core.texPageXMask) &&
+        (core.texAddrCachePageYMask == core.texPageYMask)
+    );
+
+    if (bStillValid)
+        return true;
+
+    core.bTexAddrCacheValid = true;
+    core.texAddrCacheWinX = core.texWinX;
+    core.texAddrCacheWinY = core.texWinY;
+    core.texAddrCacheWinXMask = core.texWinXMask;
+    core.texAddrCacheWinYMask = core.texWinYMask;
+    core.texAddrCachePageX = core.texPageX;
+    core.texAddrCachePageY = core.texPageY;
+    core.texAddrCachePageXMask = core.texPageXMask;
+    core.texAddrCachePageYMask = core.texPageYMask;
+
+    for (uint32_t i = 0; i <= core.texWinXMask; ++i) {
+        uint16_t vramX = (uint16_t) i;
+        vramX += core.texWinX;
+        vramX /= 2;
+        vramX &= core.texPageXMask;
+        vramX += core.texPageX;
+
+        core.texAddrCacheU[i] = vramX & core.ramXMask;
+        core.texAddrCacheUShift[i] = (uint8_t)((i & 1) * 8);
+    }
+
+    for (uint32_t i = 0; i <= core.texWinYMask; ++i) {
+        uint16_t vramY = (uint16_t) i;
+        vramY += core.texWinY;
+        vramY &= core.texPageYMask;
+        vramY += core.texPageY;
+
+        core.texAddrCacheV[i] = (uint32_t)(vramY & core.ramYMask) * core.ramPixelW;
+    }
+
+    return true;
+}
+#endif
+
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Tells if the given pixel is inside the drawing area
 //------------------------------------------------------------------------------------------------------------------------------------------
@@ -237,8 +313,8 @@ void clearRect(Core& core, const Color16 color, const uint16_t x, const uint16_t
     // Clear the rectangle
     const uint16_t begX = std::min(x, ramPixelW);
     const uint16_t begY = std::min(y, ramPixelH);
-    const uint16_t endX = (uint16_t) std::min(x + w, (int32_t) ramPixelW);
-    const uint16_t endY = (uint16_t) std::min(y + h, (int32_t) ramPixelH);
+    const uint16_t endX = (uint16_t) std::min<int32_t>((int32_t) x + w, (int32_t) ramPixelW);
+    const uint16_t endY = (uint16_t) std::min<int32_t>((int32_t) y + h, (int32_t) ramPixelH);
 
     for (uint16_t curY = begY; curY < endY; ++curY) {
         for (uint16_t curX = begX; curX < endX; ++curX) {
@@ -263,9 +339,9 @@ Color16 color24FTo16(const Color24F colorIn) noexcept {
     constexpr uint32_t ROUND_UP = (bIsTextured) ? 0 : 128;
 
     return Color16::make(
-        (uint16_t) std::min(((uint32_t) colorIn.comp.r * 31u + ROUND_UP) / COLOR_NORMALIZE, 31u),
-        (uint16_t) std::min(((uint32_t) colorIn.comp.g * 31u + ROUND_UP) / COLOR_NORMALIZE, 31u),
-        (uint16_t) std::min(((uint32_t) colorIn.comp.b * 31u + ROUND_UP) / COLOR_NORMALIZE, 31u)
+        (uint16_t) std::min<uint32_t>(((uint32_t) colorIn.comp.r * 31u + ROUND_UP) / COLOR_NORMALIZE, 31u),
+        (uint16_t) std::min<uint32_t>(((uint32_t) colorIn.comp.g * 31u + ROUND_UP) / COLOR_NORMALIZE, 31u),
+        (uint16_t) std::min<uint32_t>(((uint32_t) colorIn.comp.b * 31u + ROUND_UP) / COLOR_NORMALIZE, 31u)
     );
 }
 
@@ -312,9 +388,9 @@ Color16 colorBlend(const Color16 bg, const Color16 fg, const BlendMode mode) noe
 
         case BlendMode::Subtract:
             result.setRGB(
-                (uint16_t) std::max((int32_t) bg.getR() - (int32_t) fg.getR(), 0),
-                (uint16_t) std::max((int32_t) bg.getG() - (int32_t) fg.getG(), 0),
-                (uint16_t) std::max((int32_t) bg.getB() - (int32_t) fg.getB(), 0)
+                (uint16_t) std::max<int32_t>((int32_t) bg.getR() - (int32_t) fg.getR(), 0),
+                (uint16_t) std::max<int32_t>((int32_t) bg.getG() - (int32_t) fg.getG(), 0),
+                (uint16_t) std::max<int32_t>((int32_t) bg.getB() - (int32_t) fg.getB(), 0)
             );
             break;
 
@@ -382,6 +458,60 @@ static void draw(Core& core, const DrawRect& rect) noexcept {
     // Fill in the rectangle pixels
     const bool bEnableMasking = (!core.bDisableMasking);
     uint16_t curV = topLeftV;
+
+    // PsyDoom 3DS: fast path for the case that covers the sky, status bar, HUD and menus - an unblended 8bpp blit.
+    // The generic loop below recomputes the source and destination row addresses for every single pixel; here they
+    // are hoisted out of the inner loop.
+    //
+    // Anything drawn with 'SetShadeTex' - the sky and every status bar and menu sprite - comes through with a colour of
+    // 128,128,128, which 'colorMul' leaves completely unchanged. Detecting that up front and skipping the modulate
+    // removes six multiplies, shifts and clamps from every one of those pixels. The sky alone is a full 256 pixel wide
+    // sprite drawn under the whole world, so this is the single most drawn primitive in the frame.
+    #if PSYDOOM_3DS
+        if constexpr ((DrawMode == DrawMode::Textured) && (TexFmt == TexFmt::Bpp8)) {
+            const uint16_t vramPixelW = core.ramPixelW;
+            const uint16_t vramXMask = core.ramXMask;
+            const uint16_t vramYMask = core.ramYMask;
+            uint16_t* const pVram = core.pRam;
+            const Color16* const pClut = core.clutCache;
+
+            const bool bNeutralColor = (
+                (rectColor.comp.r == 128) &&
+                (rectColor.comp.g == 128) &&
+                (rectColor.comp.b == 128)
+            );
+
+            for (int16_t y = begY; y < endY; ++y, ++curV) {
+                // Where this row of the rectangle reads from and writes to
+                uint16_t texVramY = curV & core.texWinYMask;
+                texVramY += core.texWinY;
+                texVramY &= core.texPageYMask;
+                texVramY += core.texPageY;
+
+                const uint16_t* const pTexRow = pVram + (uint32_t)(texVramY & vramYMask) * vramPixelW;
+                uint16_t* const pDstRow = pVram + (uint32_t)(y & vramYMask) * vramPixelW;
+                uint16_t curU = topLeftU;
+
+                for (int16_t x = begX; x < endX; ++x, ++curU) {
+                    uint16_t texVramX = curU & core.texWinXMask;
+                    texVramX += core.texWinX;
+                    texVramX /= 2;
+                    texVramX &= core.texPageXMask;
+                    texVramX += core.texPageX;
+
+                    const uint16_t texPixel = pTexRow[texVramX & vramXMask];
+                    const Color16 texel = pClut[(texPixel >> ((curU & 1) * 8)) & 0xFF];
+
+                    if ((texel.bits == 0) && bEnableMasking)
+                        continue;
+
+                    pDstRow[x & vramXMask] = (bNeutralColor) ? texel : colorMul(texel, rectColor);
+                }
+            }
+
+            return;
+        }
+    #endif
 
     for (int16_t y = begY; y < endY; ++y, ++curV) {
         uint16_t curU = topLeftU;
@@ -611,6 +741,17 @@ static void draw(Core& core, const DrawTriangle& triangle) noexcept {
     const float triArea = row_ef1 + row_ef2 + row_ef3;
     const float weightNormalize = 1.0f / triArea;
 
+    // PsyDoom 3DS: the barycentric weights, and therefore the texture coordinates, are affine in 'x'.
+    // Stepping them along the row replaces six multiplies and four adds per pixel with two adds, which matters a lot
+    // on the ARM11's VFP unit. Each row still starts from an exactly computed value so error cannot build up.
+    #if PSYDOOM_3DS
+        const float dw1dx = e2dy * weightNormalize;
+        const float dw2dx = e3dy * weightNormalize;
+        const float dw3dx = e1dy * weightNormalize;
+        const float dudx = u1 * dw1dx + u2 * dw2dx + u3 * dw3dx;
+        const float dvdx = v1 * dw1dx + v2 * dw2dx + v3 * dw3dx;
+    #endif
+
     // Process each pixel in the rectangular region being rasterized
     uint16_t* pDstPixelRow = core.pRam + ty * core.ramPixelW;
     const bool bEnableMasking = (!core.bDisableMasking);
@@ -621,16 +762,33 @@ static void draw(Core& core, const DrawTriangle& triangle) noexcept {
         float col_ef2 = row_ef2;
         float col_ef3 = row_ef3;
 
+        #if PSYDOOM_3DS
+            const float rowW1 = (row_ef2 + ef2_bias) * weightNormalize;
+            const float rowW2 = (row_ef3 + ef3_bias) * weightNormalize;
+            const float rowW3 = (row_ef1 + ef1_bias) * weightNormalize;
+
+            // Note: the small nudges are folded in here; they account for float imprecision and prevent 'fuzzyness'
+            float uf = u1 * rowW1 + u2 * rowW2 + u3 * rowW3 + 1.0f / 8192.0f;
+            float vf = v1 * rowW1 + v2 * rowW2 + v3 * rowW3 - 1.0f / 8192.0f;
+        #endif
+
         for (int32_t x = lx; x <= rx; ++x) {
             // Get the sign of each edge function
             const bool bSign1 = (col_ef1 <= 0);
             const bool bSign2 = (col_ef2 <= 0);
             const bool bSign3 = (col_ef3 <= 0);
 
-            // Compute the vertex weights
-            const float w1 = (col_ef2 + ef2_bias) * weightNormalize;
-            const float w2 = (col_ef3 + ef3_bias) * weightNormalize;
-            const float w3 = (col_ef1 + ef1_bias) * weightNormalize;
+            #if PSYDOOM_3DS
+                const float curU = uf;
+                const float curV = vf;
+                uf += dudx;
+                vf += dvdx;
+            #else
+                // Compute the vertex weights
+                const float w1 = (col_ef2 + ef2_bias) * weightNormalize;
+                const float w2 = (col_ef3 + ef3_bias) * weightNormalize;
+                const float w3 = (col_ef1 + ef1_bias) * weightNormalize;
+            #endif
 
             // Step the edge function to the next column
             col_ef1 += e1dy;
@@ -643,8 +801,13 @@ static void draw(Core& core, const DrawTriangle& triangle) noexcept {
                 continue;
 
             // Compute the texture coordinate to use and nudge slightly if it's close to the next integer coord (to account for float inprecision and prevent 'fuzzyness')
-            [[maybe_unused]] const uint16_t u = (uint16_t)(u1 * w1 + u2 * w2 + u3 * w3 + 1.0f / 8192.0f);
-            [[maybe_unused]] const uint16_t v = (uint16_t)(v1 * w1 + v2 * w2 + v3 * w3 - 1.0f / 8192.0f);
+            #if PSYDOOM_3DS
+                [[maybe_unused]] const uint16_t u = (uint16_t) curU;
+                [[maybe_unused]] const uint16_t v = (uint16_t) curV;
+            #else
+                [[maybe_unused]] const uint16_t u = (uint16_t)(u1 * w1 + u2 * w2 + u3 * w3 + 1.0f / 8192.0f);
+                [[maybe_unused]] const uint16_t v = (uint16_t)(v1 * w1 + v2 * w2 + v3 * w3 - 1.0f / 8192.0f);
+            #endif
 
             // Get the foreground color for the triangle pixel if the triangle is textured.
             // If the pixel is transparent and masking is enabled then also skip it, otherwise modulate it by the primitive color...
@@ -788,6 +951,19 @@ static void draw(Core& core, const DrawTriangleGouraud& triangle) noexcept {
     const float triArea = row_ef1 + row_ef2 + row_ef3;
     const float weightNormalize = 1.0f / triArea;
 
+    // PsyDoom 3DS: the texture coordinates and the Gouraud color are all affine in 'x', so step them along the row
+    // rather than recomputing fifteen multiplies per pixel. Each row starts from an exactly computed value.
+    #if PSYDOOM_3DS
+        const float dw1dx = e2dy * weightNormalize;
+        const float dw2dx = e3dy * weightNormalize;
+        const float dw3dx = e1dy * weightNormalize;
+        const float dudx = u1 * dw1dx + u2 * dw2dx + u3 * dw3dx;
+        const float dvdx = v1 * dw1dx + v2 * dw2dx + v3 * dw3dx;
+        const float drdx = color1R * dw1dx + color2R * dw2dx + color3R * dw3dx;
+        const float dgdx = color1G * dw1dx + color2G * dw2dx + color3G * dw3dx;
+        const float dbdx = color1B * dw1dx + color2B * dw2dx + color3B * dw3dx;
+    #endif
+
     // Process each pixel in the rectangular region being rasterized
     uint16_t* pDstPixelRow = core.pRam + ty * core.ramPixelW;
     const bool bEnableMasking = (!core.bDisableMasking);
@@ -798,16 +974,41 @@ static void draw(Core& core, const DrawTriangleGouraud& triangle) noexcept {
         float col_ef2 = row_ef2;
         float col_ef3 = row_ef3;
 
+        #if PSYDOOM_3DS
+            const float rowW1 = (row_ef2 + ef2_bias) * weightNormalize;
+            const float rowW2 = (row_ef3 + ef3_bias) * weightNormalize;
+            const float rowW3 = (row_ef1 + ef1_bias) * weightNormalize;
+
+            float uf = u1 * rowW1 + u2 * rowW2 + u3 * rowW3 + 1.0f / 8192.0f;
+            float vf = v1 * rowW1 + v2 * rowW2 + v3 * rowW3 - 1.0f / 8192.0f;
+            float rf = color1R * rowW1 + color2R * rowW2 + color3R * rowW3 + 0.5f;
+            float gf = color1G * rowW1 + color2G * rowW2 + color3G * rowW3 + 0.5f;
+            float bf = color1B * rowW1 + color2B * rowW2 + color3B * rowW3 + 0.5f;
+        #endif
+
         for (int32_t x = lx; x <= rx; ++x) {
             // Get the sign of each edge function
             const bool bSign1 = (col_ef1 <= 0);
             const bool bSign2 = (col_ef2 <= 0);
             const bool bSign3 = (col_ef3 <= 0);
 
-            // Compute the vertex weights
-            const float w1 = (col_ef2 + ef2_bias) * weightNormalize;
-            const float w2 = (col_ef3 + ef3_bias) * weightNormalize;
-            const float w3 = (col_ef1 + ef1_bias) * weightNormalize;
+            #if PSYDOOM_3DS
+                const float curU = uf;
+                const float curV = vf;
+                const float curR = rf;
+                const float curG = gf;
+                const float curB = bf;
+                uf += dudx;
+                vf += dvdx;
+                rf += drdx;
+                gf += dgdx;
+                bf += dbdx;
+            #else
+                // Compute the vertex weights
+                const float w1 = (col_ef2 + ef2_bias) * weightNormalize;
+                const float w2 = (col_ef3 + ef3_bias) * weightNormalize;
+                const float w3 = (col_ef1 + ef1_bias) * weightNormalize;
+            #endif
 
             // Step the edge function to the next column
             col_ef1 += e1dy;
@@ -820,13 +1021,21 @@ static void draw(Core& core, const DrawTriangleGouraud& triangle) noexcept {
                 continue;
 
             // Compute the texture coordinate to use and nudge slightly if it's close to the next integer coord (to account for float inprecision and prevent 'fuzzyness')
-            [[maybe_unused]] const uint16_t u = (uint16_t)(u1 * w1 + u2 * w2 + u3 * w3 + 1.0f / 8192.0f);
-            [[maybe_unused]] const uint16_t v = (uint16_t)(v1 * w1 + v2 * w2 + v3 * w3 - 1.0f / 8192.0f);
+            // Also compute the triangle gouraud color at this pixel using the weights.
+            #if PSYDOOM_3DS
+                [[maybe_unused]] const uint16_t u = (uint16_t) curU;
+                [[maybe_unused]] const uint16_t v = (uint16_t) curV;
+                const uint8_t gColorR = (uint8_t) std::clamp(curR, 0.0f, 255.0f);
+                const uint8_t gColorG = (uint8_t) std::clamp(curG, 0.0f, 255.0f);
+                const uint8_t gColorB = (uint8_t) std::clamp(curB, 0.0f, 255.0f);
+            #else
+                [[maybe_unused]] const uint16_t u = (uint16_t)(u1 * w1 + u2 * w2 + u3 * w3 + 1.0f / 8192.0f);
+                [[maybe_unused]] const uint16_t v = (uint16_t)(v1 * w1 + v2 * w2 + v3 * w3 - 1.0f / 8192.0f);
 
-            // Compute the triangle gouraud color at this pixel using the weights
-            const uint8_t gColorR = (uint8_t) std::clamp(color1R * w1 + color2R * w2 + color3R * w3 + 0.5f, 0.0f, 255.0f);
-            const uint8_t gColorG = (uint8_t) std::clamp(color1G * w1 + color2G * w2 + color3G * w3 + 0.5f, 0.0f, 255.0f);
-            const uint8_t gColorB = (uint8_t) std::clamp(color1B * w1 + color2B * w2 + color3B * w3 + 0.5f, 0.0f, 255.0f);
+                const uint8_t gColorR = (uint8_t) std::clamp(color1R * w1 + color2R * w2 + color3R * w3 + 0.5f, 0.0f, 255.0f);
+                const uint8_t gColorG = (uint8_t) std::clamp(color1G * w1 + color2G * w2 + color3G * w3 + 0.5f, 0.0f, 255.0f);
+                const uint8_t gColorB = (uint8_t) std::clamp(color1B * w1 + color2B * w2 + color3B * w3 + 0.5f, 0.0f, 255.0f);
+            #endif
 
             // Figure out the foreground color for the pixel for the current draw mode.
             // If the pixel is transparent and masking is enabled then also skip it, otherwise modulate it by the primitive color...
@@ -932,8 +1141,18 @@ void draw(Core& core, const DrawFloorRow& row) noexcept {
         return;
 
     // If we're going to draw textured and with a CLUT make sure it is up to date
+    #if PSYDOOM_3DS
+        bool bUseTexAddrCache = false;
+    #endif
+
     if constexpr ((DrawMode == DrawMode::Textured) || (DrawMode == DrawMode::TexturedBlended)) {
         updateClutCache(core);
+
+        // PsyDoom 3DS: a floor span moves through the texture on both axes, so it pays the full address computation
+        // twice per pixel. Tabulating it turns a dozen operations into two lookups.
+        #if PSYDOOM_3DS
+            bUseTexAddrCache = updateTexAddrCache(core);
+        #endif
     }
 
     // If we are in flat colored mode then decide the foreground color for every pixel in the row
@@ -950,39 +1169,77 @@ void draw(Core& core, const DrawFloorRow& row) noexcept {
     const uint16_t vramYMask = core.ramYMask;
     uint16_t* const pVram = core.pRam;
 
-    // Process each pixel in the line being rasterized
-    float t = (0.5f + (float) lx - minX) * tStep;
-    float tinv = 1.0f - t;
+    // Process each pixel in the line being rasterized.
+    // PsyDoom 3DS: interpolate the uvs in 16.16 fixed point instead of float; VFP math is expensive on the ARM11.
+    // Also allow columns to be skipped and replicated, to trade detail for speed.
+    #if PSYDOOM_3DS
+        static constexpr float UV_FIXED_SCALE = 65536.0f;
+        const int32_t stepX = gPixelStepX;
+        const float startT = (0.5f + (float) lx - minX) * tStep;
+        const int32_t uStepFixed = (int32_t)((u2 - u1) * tStep * UV_FIXED_SCALE);
+        const int32_t vStepFixed = (int32_t)((v2 - v1) * tStep * UV_FIXED_SCALE);
+        int32_t uFixed = (int32_t)((u1 + (u2 - u1) * startT) * UV_FIXED_SCALE);
+        int32_t vFixed = (int32_t)((v1 + (v2 - v1) * startT) * UV_FIXED_SCALE);
+        const int32_t uStridedStep = uStepFixed * stepX;
+        const int32_t vStridedStep = vStepFixed * stepX;
+    #else
+        float t = (0.5f + (float) lx - minX) * tStep;
+        float tinv = 1.0f - t;
+    #endif
 
     uint16_t* pDstPixelRow = pVram + py * vramPixelW;
     const bool bEnableMasking = (!core.bDisableMasking);
 
+#if PSYDOOM_3DS
+    for (int32_t x = lx; x <= rx; x += stepX) {
+#else
     for (int32_t x = lx; x <= rx; ++x) {
+#endif
         // Compute the texture coordinate to use
-        const uint16_t u = (uint16_t)(u1 * tinv + u2 * t);
-        const uint16_t v = (uint16_t)(v1 * tinv + v2 * t);
-
-        // Step these to the next pixel
-        t += tStep;
-        tinv -= tStep;
+        #if PSYDOOM_3DS
+            const uint16_t u = (uint16_t)(uFixed >> 16);
+            const uint16_t v = (uint16_t)(vFixed >> 16);
+            uFixed += uStridedStep;
+            vFixed += vStridedStep;
+        #else
+            const uint16_t u = (uint16_t)(u1 * tinv + u2 * t);
+            const uint16_t v = (uint16_t)(v1 * tinv + v2 * t);
+            t += tStep;
+            tinv -= tStep;
+        #endif
 
         // Get the foreground color for the row pixel if the row is textured.
         // If the pixel is transparent and masking is enabled then also skip it, otherwise modulate it by the primitive color...
         if constexpr ((DrawMode == DrawMode::Textured) || (DrawMode == DrawMode::TexturedBlended)) {
-            // Figure out the VRAM coordinates to read the VRAM pixel from
-            uint16_t vramX = u & core.texWinXMask;
-            uint16_t vramY = v & core.texWinYMask;
-            vramX += core.texWinX;
-            vramY += core.texWinY;
-            vramX /= 2;
-            vramX &= core.texPageXMask;
-            vramY &= core.texPageYMask;
-            vramX += core.texPageX;
-            vramY += core.texPageY;
+            uint16_t vramPixel;
+            uint16_t clutIdx;
 
-            // Read the VRAM pixel and lookup the actual texel using the clut index
-            const uint16_t vramPixel = pVram[(vramY & vramYMask) * vramPixelW + (vramX & vramXMask)];
-            const uint16_t clutIdx = (vramPixel >> ((u & 1) * 8)) & 0xFF;
+            #if PSYDOOM_3DS
+            if (bUseTexAddrCache) {
+                const uint32_t maskedU = u & core.texWinXMask;
+                const uint32_t maskedV = v & core.texWinYMask;
+
+                vramPixel = pVram[core.texAddrCacheV[maskedV] + core.texAddrCacheU[maskedU]];
+                clutIdx = (vramPixel >> core.texAddrCacheUShift[maskedU]) & 0xFF;
+            } else
+            #endif
+            {
+                // Figure out the VRAM coordinates to read the VRAM pixel from
+                uint16_t vramX = u & core.texWinXMask;
+                uint16_t vramY = v & core.texWinYMask;
+                vramX += core.texWinX;
+                vramY += core.texWinY;
+                vramX /= 2;
+                vramX &= core.texPageXMask;
+                vramY &= core.texPageYMask;
+                vramX += core.texPageX;
+                vramY += core.texPageY;
+
+                // Read the VRAM pixel and lookup the actual texel using the clut index
+                vramPixel = pVram[(vramY & vramYMask) * vramPixelW + (vramX & vramXMask)];
+                clutIdx = (vramPixel >> ((u & 1) * 8)) & 0xFF;
+            }
+
             fgColor = core.clutCache[clutIdx];
 
             if ((fgColor.bits == 0) && bEnableMasking)
@@ -1001,6 +1258,13 @@ void draw(Core& core, const DrawFloorRow& row) noexcept {
 
         // Save the output pixel and step to the next pixel
         dstPixel = fgColor;
+
+        // PsyDoom 3DS: replicate over the columns that were skipped
+        #if PSYDOOM_3DS
+            for (int32_t repX = x + 1; (repX < x + stepX) && (repX <= rx); ++repX) {
+                pDstPixelRow[repX] = fgColor;
+            }
+        #endif
     }
 }
 
@@ -1050,6 +1314,14 @@ void draw(Core& core, const DrawWallCol& col) noexcept {
     if ((yrange >= 512) || (px < core.drawAreaLx) || (px > core.drawAreaRx))
         return;
 
+    // PsyDoom 3DS: in low detail mode the renderer only submits every Nth column, so widen each one to cover the
+    // columns that were skipped and shade only every Nth row.
+    #if PSYDOOM_3DS
+        const int32_t stepX = gPixelStepX;
+        const int32_t stepY = gPixelStepY;
+        const int32_t repEndX = std::min<int32_t>(px + stepX - 1, core.drawAreaRx);
+    #endif
+
     // If we're going to draw textured and with a CLUT make sure it is up to date
     if constexpr ((DrawMode == DrawMode::Textured) || (DrawMode == DrawMode::TexturedBlended)) {
         updateClutCache(core);
@@ -1081,19 +1353,33 @@ void draw(Core& core, const DrawWallCol& col) noexcept {
     }
 
     // Process each pixel in the line being rasterized
-    float t = (0.5f + (float) ty - minY) * tStep;
-    float tinv = 1.0f - t;
+    #if PSYDOOM_3DS
+        static constexpr float UV_FIXED_SCALE = 65536.0f;
+        const float startT = (0.5f + (float) ty - minY) * tStep;
+        int32_t vFixed = (int32_t)((v1 + (v2 - v1) * startT) * UV_FIXED_SCALE);
+        const int32_t vStridedStep = (int32_t)((v2 - v1) * tStep * UV_FIXED_SCALE) * stepY;
+    #else
+        float t = (0.5f + (float) ty - minY) * tStep;
+        float tinv = 1.0f - t;
+    #endif
 
     uint16_t* pDstPixelCol = core.pRam + px;
     const bool bEnableMasking = (!core.bDisableMasking);
 
+#if PSYDOOM_3DS
+    for (int32_t y = ty; y <= by; y += stepY) {
+#else
     for (int32_t y = ty; y <= by; ++y) {
+#endif
         // Compute the 'v' texture coordinate to use
-        const uint16_t v = (uint16_t)(v1 * tinv + v2 * t);
-
-        // Step these to the next pixel
-        t += tStep;
-        tinv -= tStep;
+        #if PSYDOOM_3DS
+            const uint16_t v = (uint16_t)(vFixed >> 16);
+            vFixed += vStridedStep;
+        #else
+            const uint16_t v = (uint16_t)(v1 * tinv + v2 * t);
+            t += tStep;
+            tinv -= tStep;
+        #endif
 
         // Get the foreground color for the column pixel if the column is textured.
         // If the pixel is transparent and masking is enabled then also skip it, otherwise modulate it by the primitive color...
@@ -1126,6 +1412,17 @@ void draw(Core& core, const DrawWallCol& col) noexcept {
 
         // Save the output pixel and step to the next pixel
         dstPixel = fgColor;
+
+        // PsyDoom 3DS: fill in the rows and columns that were skipped by the low detail steps
+        #if PSYDOOM_3DS
+            for (int32_t repY = y; (repY < y + stepY) && (repY <= by); ++repY) {
+                uint16_t* const pRepRow = pDstPixelCol + repY * vramPixelW;
+
+                for (int32_t repX = px + ((repY == y) ? 1 : 0); repX <= repEndX; ++repX) {
+                    pRepRow[repX - px] = fgColor;
+                }
+            }
+        #endif
     }
 }
 
@@ -1184,6 +1481,14 @@ void draw(Core& core, const DrawWallColGouraud& col) noexcept {
     if ((yrange >= 512) || (px < core.drawAreaLx) || (px > core.drawAreaRx))
         return;
 
+    // PsyDoom 3DS: in low detail mode the renderer only submits every Nth column, so widen each one to cover the
+    // columns that were skipped and shade only every Nth row.
+    #if PSYDOOM_3DS
+        const int32_t stepX = gPixelStepX;
+        const int32_t stepY = gPixelStepY;
+        const int32_t repEndX = std::min<int32_t>(px + stepX - 1, core.drawAreaRx);
+    #endif
+
     // If we're going to draw textured and with a CLUT make sure it is up to date
     if constexpr ((DrawMode == DrawMode::Textured) || (DrawMode == DrawMode::TexturedBlended)) {
         updateClutCache(core);
@@ -1207,25 +1512,48 @@ void draw(Core& core, const DrawWallColGouraud& col) noexcept {
     }
 
     // Process each pixel in the line being rasterized
-    float t = (0.5f + (float) ty - minY) * tStep;
-    float tInv = 1.0f - t;
+    #if PSYDOOM_3DS
+        static constexpr float INTERP_FIXED_SCALE = 65536.0f;
+        const float startT = (0.5f + (float) ty - minY) * tStep;
+        int32_t vFixed = (int32_t)((v1 + (v2 - v1) * startT) * INTERP_FIXED_SCALE);
+        int32_t rFixed = (int32_t)((r1 + (r2 - r1) * startT) * INTERP_FIXED_SCALE);
+        int32_t gFixed = (int32_t)((g1 + (g2 - g1) * startT) * INTERP_FIXED_SCALE);
+        int32_t bFixed = (int32_t)((b1 + (b2 - b1) * startT) * INTERP_FIXED_SCALE);
+        const int32_t vStridedStep = (int32_t)((v2 - v1) * tStep * INTERP_FIXED_SCALE) * stepY;
+        const int32_t rStridedStep = (int32_t)((r2 - r1) * tStep * INTERP_FIXED_SCALE) * stepY;
+        const int32_t gStridedStep = (int32_t)((g2 - g1) * tStep * INTERP_FIXED_SCALE) * stepY;
+        const int32_t bStridedStep = (int32_t)((b2 - b1) * tStep * INTERP_FIXED_SCALE) * stepY;
+    #else
+        float t = (0.5f + (float) ty - minY) * tStep;
+        float tInv = 1.0f - t;
+    #endif
 
     uint16_t* pDstPixelCol = core.pRam + px;
     const bool bEnableMasking = (!core.bDisableMasking);
 
+#if PSYDOOM_3DS
+    for (int32_t y = ty; y <= by; y += stepY) {
+#else
     for (int32_t y = ty; y <= by; ++y) {
-        // Compute the 'v' texture coordinate to use
-        const uint16_t v = (uint16_t)(v1 * tInv + v2 * t);
-
-        // Compute the triangle gouraud shaded color at this pixel.
-        // Note that we could clamp to 0-255 here but it's probably not neccessary - not expecting imprecision to get that bad.
-        const uint8_t gColorR = (uint8_t)(r1 * tInv + r2 * t + 0.5f);
-        const uint8_t gColorG = (uint8_t)(g1 * tInv + g2 * t + 0.5f);
-        const uint8_t gColorB = (uint8_t)(b1 * tInv + b2 * t + 0.5f);
-
-        // Step these to the next pixel
-        t += tStep;
-        tInv -= tStep;
+#endif
+        // Compute the texture coordinate and Gouraud color to use
+        #if PSYDOOM_3DS
+            const uint16_t v = (uint16_t)(vFixed >> 16);
+            const uint8_t gColorR = (uint8_t)((rFixed + 32768) >> 16);
+            const uint8_t gColorG = (uint8_t)((gFixed + 32768) >> 16);
+            const uint8_t gColorB = (uint8_t)((bFixed + 32768) >> 16);
+            vFixed += vStridedStep;
+            rFixed += rStridedStep;
+            gFixed += gStridedStep;
+            bFixed += bStridedStep;
+        #else
+            const uint16_t v = (uint16_t)(v1 * tInv + v2 * t);
+            const uint8_t gColorR = (uint8_t)(r1 * tInv + r2 * t + 0.5f);
+            const uint8_t gColorG = (uint8_t)(g1 * tInv + g2 * t + 0.5f);
+            const uint8_t gColorB = (uint8_t)(b1 * tInv + b2 * t + 0.5f);
+            t += tStep;
+            tInv -= tStep;
+        #endif
 
         // Figure out the foreground color for the pixel for the current draw mode.
         // If the pixel is transparent and masking is enabled then also skip it, otherwise modulate it by the primitive color...
@@ -1269,6 +1597,17 @@ void draw(Core& core, const DrawWallColGouraud& col) noexcept {
 
         // Save the output pixel and step to the next pixel
         dstPixel = fgColor;
+
+        // PsyDoom 3DS: fill in the rows and columns that were skipped by the low detail steps
+        #if PSYDOOM_3DS
+            for (int32_t repY = y; (repY < y + stepY) && (repY <= by); ++repY) {
+                uint16_t* const pRepRow = pDstPixelCol + repY * vramPixelW;
+
+                for (int32_t repX = px + ((repY == y) ? 1 : 0); repX <= repEndX; ++repX) {
+                    pRepRow[repX - px] = fgColor;
+                }
+            }
+        #endif
     }
 }
 

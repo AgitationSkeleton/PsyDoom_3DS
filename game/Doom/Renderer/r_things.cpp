@@ -66,10 +66,10 @@ static void R_ClipSprite(
     }
 
     // Too much offscreen at the bottom?
-    if ((spriteH > 500) && (yb > VIEW_3D_H)) {
-        const int32_t offscreenAmt = yb - VIEW_3D_H;
+    if ((spriteH > 500) && (yb > gViewHeight)) {
+        const int32_t offscreenAmt = yb - gViewHeight;
         const fixed_t offscreenPercent = (offscreenAmt << FRACBITS) / spriteH;
-        yb = VIEW_3D_H;
+        yb = gViewHeight;
         vb = (LibGpuUV) d_fixed_to_int(R_LerpCoord(vb << FRACBITS, vt << FRACBITS, offscreenPercent) + 0x8000);
     }
 
@@ -338,7 +338,7 @@ void R_DrawSubsectorSprites(subsector_t& subsec) noexcept {
 
         drawY += tex.offsetY;
         drawY = d_fixed_to_int(drawY * -scale);     // Scale due to perspective
-        drawY += HALF_VIEW_3D_H;
+        drawY += gHalfViewHeight;
 
         int32_t drawW = d_fixed_to_int(tex.width * ASPECT_CORRECT);
         drawW = d_fixed_to_int(drawW * scale);
@@ -485,7 +485,14 @@ void R_DrawWeapon() noexcept {
 
         LIBGPU_setXY0(spr,
             (int16_t)(d_fixed_to_int(sprX) + HALF_SCREEN_W - tex.offsetX),
-            (int16_t)(d_fixed_to_int(sprY) + VIEW_3D_H - 1 - tex.offsetY)
+            // Note: the weapon sits against the bottom of the view, so growing the view carries it all the way down.
+            //
+            // Vanilla Doom instead places psprites relative to 'centery' and clips them at 'viewheight', so a taller
+            // view moves the weapon down by only half as much and reveals the rest of the artwork below it. That works
+            // on PC because the weapon sprites carry more image than a 200 row view shows. The PlayStation sprites do
+            // not: they end exactly where the status bar used to start, so following vanilla here would move the weapon
+            // down twenty rows and leave it hanging over twenty rows of nothing.
+            (int16_t)(d_fixed_to_int(sprY) + (gViewHeight - BASE_VIEW_3D_H) + (BASE_VIEW_3D_H - 1) - tex.offsetY)
         );
 
         LIBGPU_setWH(spr, tex.width, tex.height);

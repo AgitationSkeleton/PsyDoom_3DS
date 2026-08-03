@@ -20,6 +20,17 @@ Config_Game gConfig_Game = {};
 void initCfgSerialization_Game() noexcept {
     auto& cfg = gConfig_Game;
 
+#if PSYDOOM_3DS
+    gCueFilePath.clear();
+    // Interpolation only does anything when the framerate is uncapped, which is off on 3DS: there is no headroom to
+    // render in between the game's 15 Hz ticks. Leave it all off so nothing pays for it.
+    gbInterpolateSectors = false;
+    gbInterpolateMobj = false;
+    gbInterpolateMonsters = false;
+    gbInterpolateWeapon = false;
+    gMainMemoryHeapSize = 16 * 1024 * 1024;
+    gbPauseOnWindowFocusLost = false;
+#else
     cfg.cueFilePath = makeConfigField(
         "CueFilePath",
         "Default path to the .cue file for PlayStation 'Doom' or 'Final Doom', or other valid game disc.\n"
@@ -37,6 +48,7 @@ void initCfgSerialization_Game() noexcept {
         gCueFilePath,
         ""
     );
+#endif
 
     cfg.showPerfCounters = makeConfigField(
         "ShowPerfCounters",
@@ -45,6 +57,7 @@ void initCfgSerialization_Game() noexcept {
         false
     );
 
+#if !PSYDOOM_3DS
     cfg.interpolateSectors = makeConfigField(
         "InterpolateSectors",
         "When uncapped framerates are enabled, whether sector floor, ceiling and wall motion is smoothed.\n"
@@ -92,12 +105,17 @@ void initCfgSerialization_Game() noexcept {
         gMainMemoryHeapSize,
         -1
     );
+#endif
 
     cfg.skipIntros = makeConfigField(
         "SkipIntros",
         "If enabled then all intro logos and movies will be skipped on game startup.",
         gbSkipIntros,
-        false
+        #if PSYDOOM_3DS
+            true
+        #else
+            false
+        #endif
     );
 
     cfg.useFastLoading = makeConfigField(
@@ -111,7 +129,11 @@ void initCfgSerialization_Game() noexcept {
         "running but can make loading transitions more jarring and cause sounds to cut out abruptly.\n"
         "If you are playing normally it is probably more pleasant to leave this setting disabled.",
         gbUseFastLoading,
-        false
+        #if PSYDOOM_3DS
+            true
+        #else
+            false
+        #endif
     );
 
     cfg.enableSinglePlayerLevelTimer = makeConfigField(
@@ -497,6 +519,7 @@ void initCfgSerialization_Game() noexcept {
         1.0f
     );
 
+#if !PSYDOOM_3DS
     cfg.pauseOnWindowFocusLost = makeConfigField(
         "PauseOnWindowFocusLost",
         "Automatically pause the game once the PsyDoom window loses focus?\n"
@@ -508,6 +531,13 @@ void initCfgSerialization_Game() noexcept {
         gbPauseOnWindowFocusLost,
         true
     );
+#endif
 }
 
 END_NAMESPACE(ConfigSerialization)
+
+
+
+
+
+

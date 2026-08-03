@@ -16,6 +16,10 @@
 #include "PsyDoom/Utils.h"
 #include "PsyDoom/Video.h"
 
+#if PSYDOOM_3DS
+    #include "Platform_3DS.h"
+#endif
+
 #if PSYDOOM_MODS
     // PsyDoom: a flag set to 'true' if the result of demo playback is unexpected/wrong (when checking demo results).
     // This is used to set the exit code for the application accordingly ('1' if the demo result checks fail, '0' otherwise).
@@ -49,18 +53,38 @@ int psx_main(const int argc, const char* const* const argv) noexcept {
     #if PSYDOOM_MODS
         // Parse command line arguments and configuration and initialize input systems
         Utils::installFatalErrorHandler();
+        PSYDOOM_3DS_LOG("psx_main: installed the fatal error handler");
+
         ProgArgs::init(argc, argv);
+        PSYDOOM_3DS_LOG("psx_main: parsed program arguments");
 
         if (!Controls::didInit()) {
             Controls::init();
         }
 
+        PSYDOOM_3DS_LOG("psx_main: control bindings loaded");
+
         if (!Config::didInit()) {
             Config::init();
         }
 
+        PSYDOOM_3DS_LOG("psx_main: configuration loaded");
+
+        // PsyDoom 3DS: the audio buffer is not the player's to choose on fixed hardware, and a file written by an
+        // earlier build would otherwise hold it at a value that breaks the sound up. Set after the config files have
+        // been read, so that whatever they said is overruled.
+        //
+        // NDSP keeps two buffers, so the callback has one buffer's worth of time to fill the next: that has to be
+        // longer than a frame takes, and 2048 samples is 46 ms against a frame of 33-42 ms.
+        #if PSYDOOM_3DS
+            Config::gAudioBufferSize = 2048;
+        #endif
+
         Input::init();
+        PSYDOOM_3DS_LOG("psx_main: input initialized");
+
         PlayerPrefs::load();
+        PSYDOOM_3DS_LOG("psx_main: player preferences loaded");
 
         // Initialize the emulated PSX components using the PSX Doom disc (supplied as a .cue file).
         // This must be provided in order for the game to run.
@@ -77,22 +101,39 @@ int psx_main(const int argc, const char* const* const argv) noexcept {
             );
         }
 
-        if (!PsxVm::init(cueFilePath))
+        PSYDOOM_3DS_LOG("psx_main: initializing the emulated PlayStation with cue '%s'", cueFilePath);
+        PSYDOOM_3DS_LOG("psx_main: %s", Platform3DS::memoryStatusString());
+
+        if (!PsxVm::init(cueFilePath)) {
+            PSYDOOM_3DS_LOG("psx_main: PsxVm::init FAILED - exiting");
             return 1;
+        }
+
+        PSYDOOM_3DS_LOG("psx_main: emulated PlayStation initialized");
+        PSYDOOM_3DS_LOG("psx_main: %s", Platform3DS::memoryStatusString());
 
         // Determine the game type and variant and initialize the table of files on the CD from the file system
         Game::determineGameTypeAndVariant();
+        PSYDOOM_3DS_LOG("psx_main: determined the game type and variant");
+
         CdMapTbl_Init();
+        PSYDOOM_3DS_LOG("psx_main: built the CD file table");
 
         // Initialize the display, modding manager, cheats and intro logos
         Video::initVideo();
+        PSYDOOM_3DS_LOG("psx_main: video initialized");
+
         ModMgr::init();
         Cheats::init();
         IntroLogos::init();
+        PSYDOOM_3DS_LOG("psx_main: mods, cheats and intro logos initialized");
     #endif
 
     // Call the original PSX Doom 'main()' function
+    PSYDOOM_3DS_LOG("psx_main: %s", Platform3DS::memoryStatusString());
+    PSYDOOM_3DS_LOG("psx_main: entering I_Main");
     I_Main();
+    PSYDOOM_3DS_LOG("psx_main: I_Main returned, shutting down");
 
     // PsyDoom: cleanup logic after Doom itself is done and save player prefs (unless headless mode)
     #if PSYDOOM_MODS

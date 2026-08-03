@@ -144,6 +144,8 @@ set(SOURCE_FILES
     "Doom/Renderer/r_things.h"
     "Doom/UI/am_main.cpp"
     "Doom/UI/am_main.h"
+    "Doom/UI/controls3ds_main.cpp"
+    "Doom/UI/controls3ds_main.h"
     "Doom/UI/cr_main.cpp"
     "Doom/UI/cr_main.h"
     "Doom/UI/errormenu_main.cpp"
@@ -158,6 +160,8 @@ set(SOURCE_FILES
     "Doom/UI/loadsave_main.h"
     "Doom/UI/m_main.cpp"
     "Doom/UI/m_main.h"
+    "Doom/UI/menu3ds.cpp"
+    "Doom/UI/menu3ds.h"
     "Doom/UI/o_main.cpp"
     "Doom/UI/o_main.h"
     "Doom/UI/pw_main.cpp"
@@ -286,6 +290,8 @@ set(SOURCE_FILES
     "PsyDoom/NetPacketReader.h"
     "PsyDoom/NetPacketWriter.h"
     "PsyDoom/Network.cpp"
+    "PsyDoom/NetworkUds3DS.cpp"
+    "PsyDoom/NetworkUds3DS.h"
     "PsyDoom/Network.h"
     "PsyDoom/ParserTokenizer.cpp"
     "PsyDoom/ParserTokenizer.h"
@@ -301,6 +307,10 @@ set(SOURCE_FILES
     "PsyDoom/SaveAndLoad.h"
     "PsyDoom/SaveDataTypes.cpp"
     "PsyDoom/SaveDataTypes.h"
+    "PsyDoom/ControlSchemes3DS.cpp"
+    "PsyDoom/ControlSchemes3DS.h"
+    "PsyDoom/Screens3DS.cpp"
+    "PsyDoom/Screens3DS.h"
     "PsyDoom/ScriptBindings.cpp"
     "PsyDoom/ScriptBindings.h"
     "PsyDoom/ScriptingEngine.cpp"
@@ -486,7 +496,35 @@ set(INCLUDE_PATHS
 )
 
 # Platform specific sources
-if (PLATFORM_WINDOWS)
+if (PLATFORM_3DS)
+    set(PSYDOOM_3DS_VARIANT "doom" CACHE STRING "Packaged PlayStation game variant")
+    set_property(CACHE PSYDOOM_3DS_VARIANT PROPERTY STRINGS doom final_doom master_edition)
+    set(PSYDOOM_3DS_ROMFS_DIR "" CACHE PATH "Prepared 3DS RomFS directory")
+    set(PSYDOOM_3DS_ICON "" CACHE FILEPATH "Variant-specific 48x48 PNG icon")
+    option(PSYDOOM_3DS_BENCHMARK "Warp to MAP01 and write performance samples" OFF)
+
+    if (PSYDOOM_3DS_VARIANT STREQUAL "doom")
+        set(PSYDOOM_3DS_APP_NAME "PsyDoom")
+        set(PSYDOOM_3DS_VARIANT_DIR "doom")
+        set(PSYDOOM_3DS_CUE_NAME "Doom.cue")
+    elseif (PSYDOOM_3DS_VARIANT STREQUAL "final_doom")
+        set(PSYDOOM_3DS_APP_NAME "PsyDoom: Final Doom")
+        set(PSYDOOM_3DS_VARIANT_DIR "final_doom")
+        set(PSYDOOM_3DS_CUE_NAME "FinalDoom.cue")
+    elseif (PSYDOOM_3DS_VARIANT STREQUAL "master_edition")
+        set(PSYDOOM_3DS_APP_NAME "PsyDoom: Master Edition")
+        set(PSYDOOM_3DS_VARIANT_DIR "master_edition")
+        set(PSYDOOM_3DS_CUE_NAME "PSXDOOM_BETA_4.cue")
+    else()
+        message(FATAL_ERROR "Unknown PSYDOOM_3DS_VARIANT: ${PSYDOOM_3DS_VARIANT}")
+    endif()
+
+    list(APPEND SOURCE_FILES
+        "Main_3DS.cpp"
+        "Platform_3DS.cpp"
+        "Platform_3DS.h"
+    )
+elseif (PLATFORM_WINDOWS)
     # Windows
     list(APPEND SOURCE_FILES
         "Main_Windows.cpp"
@@ -530,6 +568,16 @@ target_compile_definitions(${GAME_TGT_NAME} PRIVATE
 ) 
 
 # Various tweaks that can be applied
+if (PLATFORM_3DS)
+    target_compile_definitions(${GAME_TGT_NAME} PRIVATE
+        PSYDOOM_3DS=1
+        PSYDOOM_3DS_APP_NAME="${PSYDOOM_3DS_APP_NAME}"
+        PSYDOOM_3DS_VARIANT_DIR="${PSYDOOM_3DS_VARIANT_DIR}"
+        PSYDOOM_3DS_DISC_CUE="${PSYDOOM_3DS_CUE_NAME}"
+        PSYDOOM_3DS_BENCHMARK=$<BOOL:${PSYDOOM_3DS_BENCHMARK}>
+    )
+endif()
+
 target_bool_compile_definition(${GAME_TGT_NAME} PRIVATE PSYDOOM_FIX_UB                  ${PSYDOOM_FIX_UB})
 target_bool_compile_definition(${GAME_TGT_NAME} PRIVATE PSYDOOM_LAUNCHER                ${PSYDOOM_INCLUDE_LAUNCHER})
 target_bool_compile_definition(${GAME_TGT_NAME} PRIVATE PSYDOOM_LIMIT_REMOVING          ${PSYDOOM_LIMIT_REMOVING})
@@ -558,6 +606,42 @@ endif()
 
 if (PSYDOOM_INCLUDE_VULKAN_RENDERER)
     target_link_libraries(${GAME_TGT_NAME} ${VULKAN_GL_TGT_NAME})
+endif()
+
+if (PLATFORM_3DS)
+    target_include_directories(${GAME_TGT_NAME} PRIVATE "$ENV{DEVKITPRO}/portlibs/3ds/include")
+    target_link_directories(${GAME_TGT_NAME} PRIVATE "$ENV{DEVKITPRO}/portlibs/3ds/lib")
+    target_link_libraries(${GAME_TGT_NAME} minizip z ctru m)
+    if (PSYDOOM_3DS_ICON)
+        ctr_generate_smdh(
+            OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/PsyDoom.smdh"
+            NAME "${PSYDOOM_3DS_APP_NAME}"
+            DESCRIPTION "PlayStation Doom source port"
+            AUTHOR "PsyDoom contributors"
+            ICON "${PSYDOOM_3DS_ICON}"
+        )
+    else()
+        ctr_generate_smdh(
+            OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/PsyDoom.smdh"
+            NAME "${PSYDOOM_3DS_APP_NAME}"
+            DESCRIPTION "PlayStation Doom source port"
+            AUTHOR "PsyDoom contributors"
+        )
+    endif()
+    if (PSYDOOM_3DS_ROMFS_DIR)
+        ctr_create_3dsx(PsyDoom_3dsx
+            TARGET ${GAME_TGT_NAME}
+            OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/PsyDoom.3dsx"
+            SMDH "${CMAKE_CURRENT_BINARY_DIR}/PsyDoom.smdh"
+            ROMFS "${PSYDOOM_3DS_ROMFS_DIR}"
+        )
+    else()
+        ctr_create_3dsx(PsyDoom_3dsx
+            TARGET ${GAME_TGT_NAME}
+            OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/PsyDoom.3dsx"
+            SMDH "${CMAKE_CURRENT_BINARY_DIR}/PsyDoom.smdh"
+        )
+    endif()
 endif()
 
 # MSVC specific stuff
@@ -624,3 +708,6 @@ if (PLATFORM_LINUX)
     # Static link the standard c++ and gcc libraries to make the binary more portable between Linux versions
     target_link_options(${GAME_TGT_NAME} PRIVATE -static-libgcc -static-libstdc++)
 endif()
+
+
+

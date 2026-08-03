@@ -18,6 +18,11 @@
 #include "PsyDoom/Network.h"
 #include "PsyDoom/PsxPadButtons.h"
 #include "PsyDoom/Utils.h"
+
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+    #include "PsyDoom/Video.h"
+#endif
 #include "PsyQ/LIBGPU.h"
 #include "SmallString.h"
 #include "Wess/psxcd.h"
@@ -80,6 +85,22 @@ static MenuElem gMenuElems[NUM_MENU_ELEM_TYPES] = {};
 static constexpr int32_t MAX_OPTION_SPACING = 22;
 static constexpr int32_t MIN_OPTION_SPACING = 17;
 
+#if PSYDOOM_3DS
+    //----------------------------------------------------------------------------------------------------------------
+    // PsyDoom 3DS: the main menu is drawn twice, once for each screen, so neither screen shows a slice of the other.
+    //
+    // Each pass redraws the background over the whole framebuffer and then only the content that screen should show.
+    // These are the framebuffer rows each pass hands to the presenter; both are sized so the scale to the display is
+    // exactly uniform, and both are centred in the framebuffer so the background tiling looks the same either way.
+    //----------------------------------------------------------------------------------------------------------------
+    static constexpr int32_t MENU_3DS_TOP_SRC_Y = Screens3DS::MENU_TOP_PASS_SRC_Y;
+    static constexpr int32_t MENU_3DS_BOTTOM_SRC_Y = Screens3DS::BOT_PASS_SRC_Y;
+
+    // Where the logo sits during the top screen pass: centred in the rows that pass presents
+    static constexpr int32_t MENU_3DS_LOGO_H = 70;
+    static constexpr int32_t MENU_3DS_LOGO_Y = MENU_3DS_TOP_SRC_Y + (Screens3DS::MENU_TOP_PASS_ROWS - MENU_3DS_LOGO_H) / 2;
+#endif
+
 // PsyDoom: holds info for an episode logo (lump name and texture)
 struct EpisodeLogo {
     String8     lumpName;
@@ -133,18 +154,33 @@ static void M_DoMenuLayout(const int32_t optionSpacing) noexcept {
         menuElem = {};
     }
 
-    // The size of menu elements that are always present
-    gMenuElems[MenuElem_LogoPrePad].height = 8;
-    gMenuElems[MenuElem_Logo].height = 70;  // Allow a fixed 70px maximum height for the logo (stays constant no matter the content)
-    gMenuElems[MenuElem_TextPrePad].height = 4;
+    // The size of menu elements that are always present.
+    //
+    // PsyDoom 3DS: the logo is not part of this layout at all. The two screens are drawn in separate passes, so the
+    // logo has its own position on the top screen pass and this layout only has to place the options inside the band
+    // of rows that the touch screen presents.
+    #if PSYDOOM_3DS
+        gMenuElems[MenuElem_LogoPrePad].height = 0;
+        gMenuElems[MenuElem_Logo].height = 0;
+        gMenuElems[MenuElem_TextPrePad].height = 0;
+    #else
+        gMenuElems[MenuElem_LogoPrePad].height = 8;
+        gMenuElems[MenuElem_Logo].height = 70;  // Allow a fixed 70px maximum height for the logo (stays constant no matter the content)
+        gMenuElems[MenuElem_TextPrePad].height = 4;
+    #endif
     gMenuElems[MenuElem_GameMode_Line1].height = optionSpacing;
-    gMenuElems[MenuElem_GameMode_Line2].height = std::min(optionSpacing, 20);
+    gMenuElems[MenuElem_GameMode_Line2].height = std::min<int32_t>(optionSpacing, 20);
     gMenuElems[MenuElem_Level].height = optionSpacing;
     gMenuElems[MenuElem_Difficulty_Line1].height = optionSpacing;
-    gMenuElems[MenuElem_Difficulty_Line2].height = std::min(optionSpacing, 20);
+    gMenuElems[MenuElem_Difficulty_Line2].height = std::min<int32_t>(optionSpacing, 20);
     gMenuElems[MenuElem_Options].height = optionSpacing;
     gMenuElems[MenuElem_Quit].height = optionSpacing;
-    gMenuElems[MenuElem_TextPostPad].height = 8;
+
+    #if PSYDOOM_3DS
+        gMenuElems[MenuElem_TextPostPad].height = 0;
+    #else
+        gMenuElems[MenuElem_TextPostPad].height = 8;
+    #endif
 
     // Allocate room for the 'Master Edition' sprite logo for the GEC ME (8px maximum height).
     // Also reduce the padding before the logo to make more room for it.
@@ -170,8 +206,15 @@ static void M_DoMenuLayout(const int32_t optionSpacing) noexcept {
         }
     }
 
-    // Center all the content in the middle of the screen and begin positioning the elements
-    int32_t y = (SCREEN_H - allElemsH) / 2;
+    // Center all the content in the middle of the screen and begin positioning the elements.
+    //
+    // PsyDoom 3DS: centre the options inside the band of rows the touch screen presents, not the whole framebuffer.
+    // The cursor is drawn two pixels above its row, so leave room for that at the top of the band.
+    #if PSYDOOM_3DS
+        int32_t y = MENU_3DS_BOTTOM_SRC_Y + 4 + (Screens3DS::BOT_PASS_ROWS - 4 - allElemsH) / 2;
+    #else
+        int32_t y = (SCREEN_H - allElemsH) / 2;
+    #endif
 
     for (MenuElem& menuElem : gMenuElems) {
         menuElem.yPos = y;
@@ -335,7 +378,9 @@ static void M_FixupStartEpisodeNumber(const bool bForwardDir) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 static void M_DrawDoomLogo() noexcept {
     // Draw the 'DOOM' or episode logo
-    #if PSYDOOM_MODS
+    #if PSYDOOM_3DS
+        const int32_t logoYPos = MENU_3DS_LOGO_Y;       // The logo has its own screen, so it has its own position
+    #elif PSYDOOM_MODS
         const int32_t logoYPos = gMenuElems[MenuElem_Logo].yPos;
     #else
         constexpr int32_t logoYPos = 20;
@@ -649,13 +694,38 @@ gameaction_t M_Ticker() noexcept {
         const TickInputs& oldInputs = gOldTickInputs[0];
 
         const bool bMenuStart = (inputs.fMenuStart() && (inputs.fMenuStart() != oldInputs.fMenuStart()));
-        const bool bMenuOk = (inputs.fMenuOk() && (!oldInputs.fMenuOk()));
+        bool bMenuOk = (inputs.fMenuOk() && (!oldInputs.fMenuOk()));
         const bool bMenuUp = inputs.fMenuUp();
         const bool bMenuDown = inputs.fMenuDown();
         const bool bMenuLeft = inputs.fMenuLeft();
-        const bool bMenuRight = inputs.fMenuRight();
-        const bool bMenuMove = (bMenuUp || bMenuDown || bMenuLeft || bMenuRight);
+        bool bMenuRight = inputs.fMenuRight();
+        bool bMenuMove = (bMenuUp || bMenuDown || bMenuLeft || bMenuRight);
         const bool bMenuAnyInput = (bMenuMove || bMenuOk || bMenuStart || inputs.fMenuBack());
+
+        // PsyDoom 3DS: tapping a row on the touch screen selects it. Tapping the row that is already selected acts on
+        // it: 'Options' and 'Quit' are entered, and the rows that hold a value cycle forward, same as pressing right.
+        #if PSYDOOM_3DS
+        {
+            const int32_t tappedItem = Screens3DS::consumeTappedItem();
+
+            if (tappedItem >= 0) {
+                gMenuTimeoutStartTicCon = gTicCon;
+
+                if (gCursorPos[0] != tappedItem) {
+                    gCursorPos[0] = tappedItem;
+                    S_StartSound(nullptr, sfx_pstop);
+                }
+                else if ((tappedItem == options) || (tappedItem == menu_quit)) {
+                    bMenuOk = true;
+                }
+                else {
+                    bMenuRight = true;
+                    bMenuMove = true;
+                    gVBlanksUntilMenuMove[0] = 0;   // Act on the tap immediately, don't wait out the repeat delay
+                }
+            }
+        }
+        #endif
     #else
         const padbuttons_t ticButtons = gTicButtons[0];
 
@@ -896,8 +966,28 @@ void M_Drawer() noexcept {
         Utils::onBeginUIDrawing();  // PsyDoom: UI drawing setup for the new Vulkan renderer
     #endif
 
+    // PsyDoom 3DS: first pass, the top screen. Background and logo only, then bank it before the framebuffer is
+    // redrawn for the touch screen. Doing it this way gives each screen its own background rather than two halves of
+    // one, so nothing can straddle a seam between them.
+    #if PSYDOOM_3DS
+        Screens3DS::setBottomScreen(Screens3DS::BottomScreen::MenuTwoPass);
+        Screens3DS::setMenuTwoPassRows(MENU_3DS_TOP_SRC_Y, MENU_3DS_BOTTOM_SRC_Y);
+
+        // Note: done even while the menu is on its way out. The second pass below overwrites the frame either way, so
+        // skipping this one would leave the top screen to be taken from whatever the second pass left behind.
+        I_CacheAndDrawBackgroundSprite(gTex_BACK, Game::getTexClut_BACK());
+        M_DrawDoomLogo();
+        I_SubmitGpuCmds();
+        Video::presentTopScreenOnly();
+        Screens3DS::setTopScreenAlreadyDrawn(true);
+    #endif
+
     I_CacheAndDrawBackgroundSprite(gTex_BACK, Game::getTexClut_BACK());
-    M_DrawDoomLogo();
+
+    // PsyDoom 3DS: the logo belongs to the top screen pass only
+    #if !PSYDOOM_3DS
+        M_DrawDoomLogo();
+    #endif
 
     // Figure out the y positions for everything
     #if PSYDOOM_MODS
@@ -925,6 +1015,18 @@ void M_Drawer() noexcept {
         const int32_t difficultyLine2Y = gMenuElems[MenuElem_Difficulty_Line2].yPos;
         const int32_t optionsY = gMenuElems[MenuElem_Options].yPos;
         const int32_t quitY = gMenuElems[MenuElem_Quit].yPos;
+
+        // PsyDoom 3DS: register the touchable rows for the touch screen pass
+        #if PSYDOOM_3DS
+        {
+            // Each row is touchable. 'Game Mode' and 'Difficulty' are two lines tall, so cover both.
+            Screens3DS::addTouchItem(gamemode, gameModeLine1Y - 2, (gameModeLine2Y - gameModeLine1Y) + 18);
+            Screens3DS::addTouchItem(level, levelY - 2, 20);
+            Screens3DS::addTouchItem(difficulty, difficultyLine1Y - 2, (difficultyLine2Y - difficultyLine1Y) + 18);
+            Screens3DS::addTouchItem(options, optionsY - 2, 20);
+            Screens3DS::addTouchItem(menu_quit, quitY - 2, 20);
+        }
+        #endif
     #else
         const int32_t skullCursorY = gMenuYPos[gCursorPos[0]] - 2;
         const int32_t gameModeLine1Y = gMenuYPos[gamemode];
@@ -964,7 +1066,7 @@ void M_Drawer() noexcept {
         // PsyDoom: use a more flexible drawing method that can accomodate any number of digits.
         #if PSYDOOM_MODS
             char levelNumStr[64];
-            std::snprintf(levelNumStr, C_ARRAY_SIZE(levelNumStr), "Level %d", gStartMapOrEpisode);
+            std::snprintf(levelNumStr, C_ARRAY_SIZE(levelNumStr), "Level %d", static_cast<int>(gStartMapOrEpisode));
             I_DrawString(74, levelY, levelNumStr);
         #else
             I_DrawString(74, levelY, "Level");
@@ -1010,3 +1112,4 @@ void M_DrawNetworkConnectDisplay() noexcept {
     I_DrawPresent();
 }
 #endif  // #if PSYDOOM_MODS
+

@@ -1,5 +1,9 @@
 #include "Utils.h"
 
+#include <chrono>
+#include <cstdio>
+#include <cstring>
+
 #include "Config/Config.h"
 #include "Controls.h"
 #include "DiscInfo.h"
@@ -14,6 +18,11 @@
 #include "ProgArgs.h"
 #include "PsxVm.h"
 #include "Video.h"
+
+#if PSYDOOM_3DS
+    #include "Platform_3DS.h"
+    #include "Screens3DS.h"
+#endif
 #include "Vulkan/VDrawing.h"
 #include "Vulkan/VRenderer.h"
 #include "Vulkan/VTypes.h"
@@ -28,6 +37,57 @@
 #include <thread>
 
 BEGIN_NAMESPACE(Utils)
+
+#if defined(PSYDOOM_3DS_BENCHMARK) && PSYDOOM_3DS_BENCHMARK
+
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Benchmark-only coarse profiler, see 'Utils.h'
+//------------------------------------------------------------------------------------------------------------------------------------------
+static constexpr int PROF_SCOPE_COUNT = (int) ProfScope::Count;
+
+static std::chrono::high_resolution_clock::time_point   gProfStart[PROF_SCOPE_COUNT];
+static int64_t                                          gProfUsec[PROF_SCOPE_COUNT];
+static uint32_t                                         gProfFrames;
+static std::FILE*                                       gpProfFile;
+
+void profBegin(const ProfScope scope) noexcept {
+    gProfStart[(int) scope] = std::chrono::high_resolution_clock::now();
+}
+
+void profEnd(const ProfScope scope) noexcept {
+    gProfUsec[(int) scope] += std::chrono::duration_cast<std::chrono::microseconds>(
+        std::chrono::high_resolution_clock::now() - gProfStart[(int) scope]
+    ).count();
+}
+
+void profEndFrame() noexcept {
+    gProfFrames++;
+
+    if (gProfFrames < 60)
+        return;
+
+    if (!gpProfFile) {
+        gpProfFile = std::fopen("sdmc:/3ds/PsyDoom/" PSYDOOM_3DS_VARIANT_DIR "/scopes.csv", "w");
+
+        if (gpProfFile) {
+            std::fputs("render_player_view,status_bar,present_top,present_bottom,present_swap,bsp,walls,flats,sprites,sky,weapon\n", gpProfFile);
+        }
+    }
+
+    if (gpProfFile) {
+        for (int i = 0; i < PROF_SCOPE_COUNT; ++i) {
+            std::fprintf(gpProfFile, (i + 1 < PROF_SCOPE_COUNT) ? "%.1f," : "%.1f\n", (double) gProfUsec[i] / gProfFrames);
+        }
+
+        std::fflush(gpProfFile);
+    }
+
+    gProfFrames = 0;
+    std::memset(gProfUsec, 0, sizeof(gProfUsec));
+}
+
+#endif
+
 
 static constexpr const char* const SAVE_FILE_ORG        = "com.codelobster";    // Root folder to save config in (in a OS specific writable prefs location)
 static constexpr const char* const SAVE_FILE_PRODUCT    = "PsyDoom";            // Sub-folder within the root folder to save the config in
@@ -66,7 +126,14 @@ static void fatalErrorHandler(const char* const msg) noexcept {
 
     bDidHandleFatalError = true;
     Video::shutdownVideo();
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "A fatal error has occurred!", msg, nullptr);
+
+    // PsyDoom 3DS: there is no message box on this platform, and the 'abort' that follows would drop the player back to
+    // the HOME Menu without a word. Put the message on the top screen and wait for them instead.
+    #if PSYDOOM_3DS
+        Platform3DS::reportFatalError(msg);
+    #else
+        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "A fatal error has occurred!", msg, nullptr);
+    #endif
 }
 
 void installFatalErrorHandler() noexcept {
@@ -105,6 +172,12 @@ void doPlatformUpdates() noexcept {
     // Always generate timer events and update the music sequencer.
     // Note that for PsyDoom the sequencer is now manually updated here and it now uses a delta time rather than a fixed increment
     PsxVm::generateTimerEvents();
+
+    // PsyDoom 3DS: keep the CD audio read ahead topped up. This is where the SD card gets read for music, and it has
+    // to happen here rather than on the audio thread, which cannot afford to wait for it.
+    #if PSYDOOM_3DS
+        psxcd_update_audio_buffer();
+    #endif
 
     if (gbWess_SeqOn) {
         SeqEngine();
@@ -235,6 +308,14 @@ void threadYield() noexcept {
 // Does some setup for UI drawing if using the new Vulkan based renderer
 //------------------------------------------------------------------------------------------------------------------------------------------
 void onBeginUIDrawing() noexcept {
+    // PsyDoom 3DS: start each screen with the touch screen blank, and let whatever is drawing say what it wants
+    // there. Menus compose both screens themselves; anything that says nothing is either not a menu or is a frame
+    // caught between two screens, and blank reads as deliberate where half a stretched frame reads as a fault.
+    #if PSYDOOM_3DS
+        Screens3DS::clearTouchItems();
+        Screens3DS::setBottomScreen(Screens3DS::BottomScreen::Blank);
+    #endif
+
     #if PSYDOOM_VULKAN_RENDERER
         // Setup the UI transform matrix for drawing if using the Vulkan renderer
         const bool bSetDrawMatrix = (

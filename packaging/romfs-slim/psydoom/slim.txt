@@ -1,0 +1,11 @@
+This package carries no game data.
+
+The full package holds the PlayStation disc image as 'psydoom/disc.zip' and extracts it to
+'sdmc:/3ds/PsyDoom/<variant>/disc' the first time it runs. That makes it hundreds of megabytes to build, transfer and
+install, which is a lot to move for a change of a few kilobytes of code.
+
+This package is the same executable without the disc image. It expects the data to be on the SD card already, put
+there by the full package, and refuses to start with an explanation if it is not. It exists so a build can be tested
+on hardware without moving the disc image again.
+
+RomFS needs at least one file in it, which is why this note is here.

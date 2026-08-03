@@ -1,4 +1,4 @@
-#include "p_setup.h"
+﻿#include "p_setup.h"
 
 #include "Doom/Base/i_file.h"
 #include "Doom/Base/i_main.h"
@@ -1644,7 +1644,7 @@ void P_SetupLevel(const int32_t mapNum, [[maybe_unused]] const skill_t skill) no
     #if PSYDOOM_MODS
         constexpr auto makeMapFileId = [](const int32_t mapNum, const char* const extension) noexcept {
             char name[64];
-            std::sprintf(name, "MAP%02d.%s", mapNum, extension);
+            std::sprintf(name, "MAP%02d.%s", static_cast<int>(mapNum), extension);
             return CdFileId(name);
         };
 
@@ -2075,3 +2075,4 @@ static void P_CacheMapTexturesWithWidth(const int32_t width) noexcept {
     }
 }
 #endif  // #if !PSYDOOM_LIMIT_REMOVING
+

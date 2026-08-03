@@ -22,6 +22,9 @@
 #include "PsyDoom/ProgArgs.h"
 #include "PsyDoom/PsxPadButtons.h"
 #include "PsyDoom/PsxVm.h"
+#if PSYDOOM_3DS
+    #include "PsyDoom/Screens3DS.h"
+#endif
 #include "PsyDoom/Utils.h"
 #include "PsyDoom/Video.h"
 #include "PsyDoom/Vulkan/VDrawing.h"
@@ -587,6 +590,24 @@ void I_DrawLoadingPlaque(texture_t& tex, const int16_t xpos, const int16_t ypos,
         Utils::onBeginUIDrawing();  // PsyDoom: UI drawing setup for the new Vulkan renderer
     #endif
 
+    // PsyDoom 3DS: a loading plaque is not a menu, so it must not be laid out like one.
+    //
+    // 'onBeginUIDrawing' leaves the split menu layout behind it, which would cut this frame in half and show the top
+    // half blown up on the top screen and the bottom half on the touch screen - so the screen being left behind ends up
+    // squashed across both displays with the plaque somewhere in the middle of it. Present the frame whole instead, on
+    // the top screen alone, and paint over what was there so only the plaque shows.
+    #if PSYDOOM_3DS
+        Screens3DS::setBottomScreen(Screens3DS::BottomScreen::Blank);
+
+        {
+            POLY_F4 blackout = {};
+            LIBGPU_SetPolyF4(blackout);
+            LIBGPU_setRGB0(blackout, 0, 0, 0);
+            LIBGPU_setXY4(blackout, 0, 0, SCREEN_W, 0, 0, SCREEN_H, SCREEN_W, SCREEN_H);
+            I_AddPrim(blackout);
+        }
+    #endif
+
     I_CacheTex(tex);
 
     // Draw and present the plaque
@@ -662,7 +683,7 @@ void I_DrawPresent() noexcept {
         // I don't think this should actually affect any logic, but I'm doing this for the benefit of the new demo recorder.
         // The new demo recorder encodes the elapsed vblanks count using just 3 bits (0-7).
         #if PSYDOOM_MODS
-            gElapsedVBlanks = std::min(elapsedVBlanks, 4);
+            gElapsedVBlanks = std::min<int32_t>(elapsedVBlanks, 4);
         #else
             gElapsedVBlanks = elapsedVBlanks;
         #endif
@@ -739,7 +760,12 @@ void I_Init() noexcept {
 void I_NetSetup() noexcept {
     // Establish a connection over TCP for the server and client of the game.
     // If it fails or aborted then abort the game start attempt.
-    const bool bHaveNetConn = (ProgArgs::gbIsNetServer) ? Network::initForServer() : Network::initForClient();
+    // PsyDoom 3DS: local wireless decides host/join itself, since there is no command line to say which this is
+    #if PSYDOOM_3DS
+        const bool bHaveNetConn = Network::initFor3DSLocalWireless();
+    #else
+        const bool bHaveNetConn = (ProgArgs::gbIsNetServer) ? Network::initForServer() : Network::initForClient();
+    #endif
 
     if (!bHaveNetConn) {
         if (!Network::gbWasInitAborted) {
@@ -937,7 +963,7 @@ bool I_NetUpdate() noexcept {
 
     const time_point_t now = std::chrono::system_clock::now();
     const int64_t packetAgeMs = std::chrono::duration_cast<std::chrono::milliseconds>(now - inPktRecvTime).count();
-    gLastInputPacketDelayMs = std::max(MAX_PACKET_DELAY_MS - (int32_t) packetAgeMs, 0);
+    gLastInputPacketDelayMs = std::max<int32_t>(MAX_PACKET_DELAY_MS - (int32_t) packetAgeMs, 0);
 
     // Endian correct the input packet before we use it
     inPkt.errorCheck = Endian::littleToHost(inPkt.errorCheck);

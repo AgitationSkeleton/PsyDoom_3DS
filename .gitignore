@@ -8,3 +8,48 @@ CMakeSettings.json
 # Visual Studio Files
 .vs/
 .dccache
+
+# ------------------------------------------------------------------------------------------------------------------
+# 3DS build output
+#
+# Everything below is produced on your machine from your own copy of the game. None of it belongs in the repository,
+# and some of it is game data, which must not be redistributed.
+# ------------------------------------------------------------------------------------------------------------------
+/build-3ds*/
+/dist/
+/package/
+/staging/
+
+# The compressed disc image, built from your own disc
+/romfs/
+
+# Banner music, cut from your own disc's audio track
+/packaging/*/banner.wav
+
+# makerom and bannertool, built or downloaded locally
+/tools/3ds/bin/
+/tools/3ds/.build/
+
+# ------------------------------------------------------------------------------------------------------------------
+# Anything carrying game data, wherever it turns up
+# ------------------------------------------------------------------------------------------------------------------
+*.bin
+*.cue
+*.iso
+*.chd
+*.wad
+*.3dsx
+*.cia
+*.elf
+*.smdh
+*.bnr
+
+# ------------------------------------------------------------------------------------------------------------------
+# Local notes, logs and validation captures
+# ------------------------------------------------------------------------------------------------------------------
+/logs/
+/validation/
+/screenshots/
+/misc/
+/upstream/
+*.log

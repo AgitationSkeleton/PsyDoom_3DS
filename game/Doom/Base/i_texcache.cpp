@@ -159,7 +159,7 @@ static bool TC_PrepFillLocationCells(tcachepage_t& texPage, const texture_t& tex
                 const int32_t occupyBegCellY = pOccupyTex->texPageCoordY / TCACHE_CELL_SIZE;
                 const int32_t occupyMaxCellY = occupyBegCellY + pOccupyTex->height16;
                 const int32_t loosePackMaxY = gTCacheFillCellY + gTCacheLoosePackRowH;
-                const int32_t occupyTexCellsHigher = std::max(occupyMaxCellY - loosePackMaxY, 0);
+                const int32_t occupyTexCellsHigher = std::max<int32_t>(occupyMaxCellY - loosePackMaxY, 0);
                 gTCacheLoosePackRowH += occupyTexCellsHigher;
 
                 return false;
@@ -193,7 +193,7 @@ static bool TC_MoveToPageFillLocation(const texture_t& tex, const bool bLoosePac
 
         if (gTCacheFillCellX + texW16 > TCACHE_CELLS_X) {
             gTCacheFillCellX = 0;
-            gTCacheFillCellY += (bLoosePack) ? std::max(gTCacheLoosePackRowH, 1u) : 1u;     // std::max with '1' just to be safe, always skip at least 1 row
+            gTCacheFillCellY += (bLoosePack) ? std::max<uint32_t>(gTCacheLoosePackRowH, 1u) : 1u;     // std::max with '1' just to be safe, always skip at least 1 row
             gTCacheLoosePackRowH = 0;                                                       // Don't know what lies on the next row yet
         }
 

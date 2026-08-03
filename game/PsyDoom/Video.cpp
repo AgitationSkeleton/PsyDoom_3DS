@@ -71,7 +71,7 @@ static void decideStartupResolution(const uint8_t displayIndex, int32_t& w, int3
     SDL_DisplayMode displayMode;
 
     if (SDL_GetCurrentDisplayMode(displayIndex, &displayMode) != 0) {
-        FatalErrors::raise("Failed to determine current screen video mode!");
+        FatalErrors::raiseF("Failed to determine current screen video mode!\nSDL error: %s", SDL_GetError());
     }
 
     // Determine automatically decided resolution
@@ -91,7 +91,7 @@ static void decideStartupResolution(const uint8_t displayIndex, int32_t& w, int3
 
         const float xScale = std::max(((float) displayMode.w - 20.0f) / logicalDispW, 1.0f);
         const float yScale = std::max(((float) displayMode.h - 40.0f) / (float) ORIG_DISP_RES_Y, 1.0f);
-        const int32_t scale = std::max((int32_t) std::min(xScale, yScale), 1);
+        const int32_t scale = std::max<int32_t>((int32_t) std::min(xScale, yScale), 1);
 
         autoResolutionW = (int32_t)(logicalDispW * scale);
         autoResolutionH = (int32_t)((float) ORIG_DISP_RES_Y * scale);
@@ -158,8 +158,8 @@ void initVideo() noexcept {
     ASSERT(gpVideoBackend);
 
     // Set and sanitize overscan settings
-    gTopOverscan = std::clamp(Config::gTopOverscanPixels, 0, ORIG_DRAW_RES_Y / 2 - 1);
-    gBotOverscan = std::clamp(Config::gBottomOverscanPixels, 0, ORIG_DRAW_RES_Y / 2 - 1);
+    gTopOverscan = std::clamp<int32_t>(Config::gTopOverscanPixels, 0, ORIG_DRAW_RES_Y / 2 - 1);
+    gBotOverscan = std::clamp<int32_t>(Config::gBottomOverscanPixels, 0, ORIG_DRAW_RES_Y / 2 - 1);
 
     // Decide what display to use
     const uint8_t displayIndex = pickStartupDisplay();
@@ -333,6 +333,19 @@ void displayFramebuffer() noexcept {
     gpVideoBackend->displayFramebuffer();
     Utils::doPlatformUpdates();
 }
+
+#if PSYDOOM_3DS
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Stereoscopic 3D: bank the eye that has just been rendered onto the top screen, without swapping.
+// Only the SDL backend exists on 3DS, so this goes straight to it.
+//------------------------------------------------------------------------------------------------------------------------------------------
+void presentTopScreenOnly() noexcept {
+    if (ProgArgs::gbHeadlessMode)
+        return;
+
+    gVideoBackend_SDL.presentTopScreenOnly();
+}
+#endif
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Helper: tells if any of the render paths used by the new Vulkan renderer are currently in use.

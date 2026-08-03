@@ -54,12 +54,26 @@ SDL_SYS_CreateThread(SDL_Thread *thread)
     s32 priority = N3DS_THREAD_PRIORITY_MEDIUM;
     size_t stack_size = GetStackSize(thread->stacksize);
 
-    thread->handle = threadCreate(ThreadEntry,
-                                  thread,
-                                  stack_size,
-                                  priority,
-                                  -1,
-                                  false);
+    /* PsyDoom: run this on a core of its own if the console has one going spare.
+     *
+     * The only thread SDL creates here is the one that feeds audio, and it has real work to do: it runs the emulated
+     * PlayStation sound chip. Sharing a core with a game loop that is flat out means it only gets to run when the game
+     * loop is preempted, and the sound breaks up no matter how much is buffered ahead of it.
+     *
+     * A New 3DS has a third core that applications may use, which is ideal - nothing else is on it. Ask for that
+     * first, and fall back to letting the system place the thread when it is not there, as on an original 3DS. */
+    bool bIsNew3DS = false;
+    APT_CheckNew3DS(&bIsNew3DS);
+
+    thread->handle = NULL;
+
+    if (bIsNew3DS) {
+        thread->handle = threadCreate(ThreadEntry, thread, stack_size, priority, 2, false);
+    }
+
+    if (thread->handle == NULL) {
+        thread->handle = threadCreate(ThreadEntry, thread, stack_size, priority, -1, false);
+    }
 
     if (thread->handle == NULL) {
         return SDL_SetError("Couldn't create thread");
