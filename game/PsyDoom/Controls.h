@@ -146,6 +146,12 @@ const BindingData& getBindingData(const Binding binding) noexcept;
 float getFloat(const Binding binding) noexcept;
 bool getBool(const Binding binding) noexcept;
 bool isJustPressed(const Binding binding) noexcept;
+
+// The game reads a few bindings once per tick as a press rather than a hold, and ticks can be much further apart than
+// input updates - a network game waiting on the other console updates input continuously. These remember such a press
+// until the tick collects it, so one made in between is not thrown away. See the definitions.
+void latchTickPresses() noexcept;
+bool consumeLatchedPress(const Binding binding) noexcept;
 bool isJustReleased(const Binding binding) noexcept;
 uint16_t getPSXCheatButtonBits() noexcept;
 

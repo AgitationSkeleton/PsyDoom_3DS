@@ -1115,8 +1115,10 @@ void P_GatherTickInputs(TickInputs& inputs) noexcept {
     inputs.fStrafe() = Controls::getBool(Controls::Binding::Modifier_Strafe);
     inputs.fPrevWeapon() = Controls::getBool(Controls::Binding::Weapon_Previous);
     inputs.fNextWeapon() = Controls::getBool(Controls::Binding::Weapon_Next);
-    inputs.fTogglePause() = Controls::isJustPressed(Controls::Binding::Toggle_Pause);
-    inputs.fToggleMap() = Controls::isJustPressed(Controls::Binding::Toggle_Map);
+    // Taken rather than merely read: a press made while the game was waiting on the other console has to count too.
+    // See 'Controls::latchTickPresses'.
+    inputs.fTogglePause() = Controls::consumeLatchedPress(Controls::Binding::Toggle_Pause);
+    inputs.fToggleMap() = Controls::consumeLatchedPress(Controls::Binding::Toggle_Map);
     inputs.fAutomapZoomIn() = Controls::getBool(Controls::Binding::Automap_ZoomIn);
     inputs.fAutomapZoomOut() = Controls::getBool(Controls::Binding::Automap_ZoomOut);
     inputs.fAutomapMoveLeft() = Controls::getBool(Controls::Binding::Automap_MoveLeft);

@@ -18,7 +18,12 @@
 #include "NetworkUds3DS.h"
 #include "ProgArgs.h"
 #include "Utils.h"
+#include "Controls.h"
 #include "Video.h"
+
+#if PSYDOOM_3DS
+    #include "Platform_3DS.h"
+#endif
 
 #include <cstring>
 
@@ -54,12 +59,23 @@ static bool pumpWhileWaiting(const bool bIsAbortable) noexcept {
     NetworkUds3DS::update();
     Utils::doPlatformUpdates();
 
+    // That update threw away whatever the previous one saw. This is the only place that happens faster than the game
+    // ticks, so it is the only place a press can go missing - hold on to the ones the tick reads as a press.
+    Controls::latchTickPresses();
+
     if (bIsAbortable && isCancelRequested()) {
         gbWasInitAborted = true;
         return false;
     }
 
-    Video::displayFramebuffer();
+    // Note: deliberately not repainting. The screens already hold a finished frame, and redrawing them from the
+    // framebuffer mid frame is what put the status bar and the intermission on the top screen.
+    #if PSYDOOM_3DS
+        Platform3DS::idleWait();
+    #else
+        Video::displayFramebuffer();
+    #endif
+
     Utils::threadYield();
     return true;
 }
@@ -237,12 +253,23 @@ bool sendTickPacket(const NetPacket_Tick& packet) noexcept {
         return false;
 
     // Note: waits for room rather than giving up. See the comment above 'sendBytes'.
+    //
+    // Bounded, for the same reason the receive is: room only frees up when the other console acknowledges, so a
+    // console that has gone away would otherwise leave this spinning for good.
+    constexpr auto SEND_WINDOW_TIMEOUT = std::chrono::seconds(20);
+    const auto waitStartTime = std::chrono::steady_clock::now();
+
     while (!NetworkUds3DS::send(&packet, sizeof(packet))) {
-        if (!pumpWhileWaiting(false))
+        if (!pumpWhileWaiting(true))
             return false;
 
         if (!isConnected())
             return false;
+
+        if (std::chrono::steady_clock::now() - waitStartTime > SEND_WINDOW_TIMEOUT) {
+            shutdown();
+            return false;
+        }
     }
 
     return true;
@@ -262,6 +289,13 @@ bool requestTickPackets() noexcept {
 bool recvTickPacket(NetPacket_Tick& packet, std::chrono::system_clock::time_point& receiveTime) noexcept {
     if (!isConnected())
         return false;
+
+    // How long to keep waiting on a console that has said nothing at all.
+    //
+    // Generous on purpose: the other side goes quiet for a while when it loads a level, and cutting a game short over
+    // an ordinary pause would be far worse than taking a few seconds to notice a console that has genuinely gone.
+    constexpr auto PEER_SILENCE_TIMEOUT = std::chrono::seconds(20);
+    const auto waitStartTime = std::chrono::steady_clock::now();
 
     while (!gbHavePendingTickPacket) {
         int64_t recvTimeMs = 0;
@@ -286,11 +320,18 @@ bool recvTickPacket(NetPacket_Tick& packet, std::chrono::system_clock::time_poin
             return false;
         }
 
-        if (!pumpWhileWaiting(false))
+        // Note: abortable, unlike before. Without this the only way out of a game whose other console had gone was to
+        // turn this one off too.
+        if (!pumpWhileWaiting(true))
             return false;
 
         if (!isConnected())
             return false;
+
+        if (std::chrono::steady_clock::now() - waitStartTime > PEER_SILENCE_TIMEOUT) {
+            shutdown();     // Nothing has arrived for long enough that the other console is not coming back
+            return false;
+        }
     }
 
     packet = gPendingTickPacket;

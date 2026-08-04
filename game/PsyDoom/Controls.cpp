@@ -471,6 +471,38 @@ bool getBool(const Binding binding) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Tells if the given input binding has just been pressed - useful for toggle type actions
 //------------------------------------------------------------------------------------------------------------------------------------------
+//------------------------------------------------------------------------------------------------------------------------------------------
+// Remembering presses that happen between game ticks.
+//
+// Only the bindings the game samples as an edge need this. Everything else is read as a hold, which cannot be missed.
+//------------------------------------------------------------------------------------------------------------------------------------------
+static constexpr Binding LATCHED_BINDINGS[] = {
+    Binding::Toggle_Pause,
+    Binding::Toggle_Map,
+};
+
+static bool gbLatchedPress[C_ARRAY_SIZE(LATCHED_BINDINGS)] = {};
+
+void latchTickPresses() noexcept {
+    for (uint32_t i = 0; i < C_ARRAY_SIZE(LATCHED_BINDINGS); ++i) {
+        if (isJustPressed(LATCHED_BINDINGS[i])) {
+            gbLatchedPress[i] = true;
+        }
+    }
+}
+
+bool consumeLatchedPress(const Binding binding) noexcept {
+    for (uint32_t i = 0; i < C_ARRAY_SIZE(LATCHED_BINDINGS); ++i) {
+        if (LATCHED_BINDINGS[i] == binding) {
+            const bool bPressed = (gbLatchedPress[i] || isJustPressed(binding));
+            gbLatchedPress[i] = false;
+            return bPressed;
+        }
+    }
+
+    return isJustPressed(binding);      // Not one of the latched ones
+}
+
 bool isJustPressed(const Binding binding) noexcept {
     // Invalid bindings are never just pressed
     const uint16_t bindingIdx = (uint16_t) binding;
