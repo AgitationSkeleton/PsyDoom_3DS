@@ -8,6 +8,7 @@
 #include "xoptions_main.h"
 
 #include "Doom/Base/i_main.h"
+#include "Doom/Base/i_drawcmds.h"
 #include "Doom/Base/i_misc.h"
 #include "Doom/Base/s_sound.h"
 #include "Doom/Base/sounds.h"
@@ -557,6 +558,23 @@ void XOptions_Draw() noexcept {
         if (gCursorPos[gCurPlayerIndex] == menu_exit) {
             cursorY = MENU_ROW_BACK;
         }
+
+        // PsyDoom 3DS: which build this is, along the bottom.
+        //
+        // It is in the startup log too, but reading that means taking the SD card out of both consoles. Two players
+        // comparing what they are running should be able to do it by looking at the screen, and working out whether
+        // two consoles are on the same build has already cost several rounds of testing.
+        #if PSYDOOM_3DS
+        {
+            // The small font is sprites from the STATUS page, so point the GPU at it: the menu has left it elsewhere
+            DR_MODE drawModePrim = {};
+            const SRECT texWindow = { (int16_t) gTex_STATUS.texPageCoordX, (int16_t) gTex_STATUS.texPageCoordY, 256, 256 };
+            LIBGPU_SetDrawMode(drawModePrim, false, false, gTex_STATUS.texPageId, &texWindow);
+            I_AddPrim(drawModePrim);
+
+            I_DrawStringSmall(8, MENU_ROW_BACK + 22, "BUILD " PSYDOOM_3DS_BUILD_ID, Game::getTexClut_STATUS(), 96, 96, 96, false, true);
+        }
+        #endif
 
         // Draw the skull cursor
         DrawCursor(cursorX, cursorY);

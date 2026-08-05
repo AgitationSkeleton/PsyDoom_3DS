@@ -8,6 +8,8 @@
 //------------------------------------------------------------------------------------------------------------------------------------------
 #include "MobjSpritePrecacher.h"
 
+#include "Utils.h"
+
 #include "Doom/Base/i_main.h"
 #include "Doom/Base/w_wad.h"
 #include "Doom/Base/z_zone.h"
@@ -215,6 +217,12 @@ static void precacheSprites() noexcept {
 
                 W_CacheLumpNum(sprLumpIdx, PU_CACHE, false);
             }
+
+            // PsyDoom 3DS: caching sprites is one of the longest stretches of a level load, and the wireless has to be
+            // serviced throughout or the system takes the link down. See 'P_SetupLevel'.
+            #if PSYDOOM_3DS
+                Utils::doPlatformUpdates();
+            #endif
         }
     }
 }

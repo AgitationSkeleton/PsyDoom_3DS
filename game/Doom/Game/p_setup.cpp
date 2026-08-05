@@ -1,4 +1,4 @@
-﻿#include "p_setup.h"
+#include "p_setup.h"
 
 #include "Doom/Base/i_file.h"
 #include "Doom/Base/i_main.h"
@@ -32,6 +32,7 @@
 #include "PsyDoom/BuiltInPaletteData.h"
 #include "PsyDoom/DevMapAutoReloader.h"
 #include "PsyDoom/Game.h"
+#include "PsyDoom/Utils.h"
 #include "PsyDoom/MapHash.h"
 #include "PsyDoom/MapInfo/GecMapInfo.h"
 #include "PsyDoom/MapInfo/MapInfo.h"
@@ -1596,6 +1597,15 @@ void P_SetupLevel(const int32_t mapNum, [[maybe_unused]] const skill_t skill) no
     Z_CheckHeap(*gpMainMemZone);
     M_ClearRandom();
 
+    // PsyDoom 3DS: give the platform a turn between the heavy parts of a level load.
+    //
+    // None of this used to let it have one, and on a 3DS the wireless has to be serviced to stay up - keepalives sent,
+    // arrivals pulled. A load long enough had the system take the link down on its own, which showed up as a network
+    // error on the way into the next level of a co-op game.
+    #if PSYDOOM_3DS
+        Utils::doPlatformUpdates();
+    #endif
+
     // PsyDoom: initialize the map object weak referencing system and mark the level as not complete
     #if PSYDOOM_MODS
         P_InitWeakRefs();
@@ -1781,11 +1791,19 @@ void P_SetupLevel(const int32_t mapNum, [[maybe_unused]] const skill_t skill) no
         #if !PSYDOOM_MODS
             P_LoadBlocks(mapSprFile);
         #endif
+
+        #if PSYDOOM_3DS
+            Utils::doPlatformUpdates();
+        #endif
     }
 
     // PsyDoom: precache all sprites needed for the level
     #if PSYDOOM_MODS
         MobjSpritePrecacher::doPrecaching();
+    #endif
+
+    #if PSYDOOM_3DS
+        Utils::doPlatformUpdates();
     #endif
 
     // Check there is enough heap space left in order to run the level

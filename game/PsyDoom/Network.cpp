@@ -191,7 +191,6 @@ bool initFor3DSLocalWireless() noexcept {
     // Alternating breaks that. Whoever is advertising when the other happens to scan gets found, and since a scan
     // takes a varying amount of time on the radio the two consoles drift apart rather than staying in step.
     constexpr int32_t NUM_ROUNDS = 8;
-    constexpr int64_t HOST_WAIT_MS = 3000;      // Long enough for the other console to complete a scan and join
 
     for (int32_t round = 0; round < NUM_ROUNDS; ++round) {
         // Is anyone advertising right now?
@@ -218,12 +217,19 @@ bool initFor3DSLocalWireless() noexcept {
         if (!pumpWhileWaiting(true, true))
             return false;
 
-        // Nobody about, so advertise for a while and see if anyone turns up
+        // Nobody about, so advertise for a while and see if anyone turns up.
+        //
+        // Longer each round, so that whoever started first ends up hosting - which is how the link cable behaved, and
+        // the host decides the map, the skill and the mode. A console that has been trying for a while spends most of
+        // its time advertising while one that has just started spends most of its time looking, so the one that
+        // started first is nearly always the one that gets found.
+        const int64_t hostWaitMs = std::min<int64_t>(1000 + (int64_t) round * 1200, 6000);
+
         if (NetworkUds3DS::hostGame((uint8_t) gStartGameType, (uint8_t) gStartSkill, (int16_t) gStartMapOrEpisode)) {
             ProgArgs::gbIsNetServer = true;
             ProgArgs::gbIsNetClient = false;
 
-            if (waitForLink(HOST_WAIT_MS))
+            if (waitForLink(hostWaitMs))
                 return true;
 
             NetworkUds3DS::disconnect();

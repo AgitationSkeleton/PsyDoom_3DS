@@ -232,6 +232,18 @@ void psxcd_update_audio_buffer() noexcept {
     // that must not also lose its music.
     constexpr int32_t MAX_SECTORS_PER_UPDATE = 8;
 
+    // ...and nothing at all until there is that much room to fill, so most visits cost nothing.
+    //
+    // Without this the ring is topped up on every single visit, which on the menus and the title screen - where this is
+    // reached far more often than the game needs - turns into a constant trickle of small reads off the card. Batching
+    // them is the same bytes in far fewer trips.
+    {
+        std::lock_guard<std::mutex> lock(gCdRingMutex);
+
+        if (CD_RING_SAMPLES - gCdRingCount < CD_SECTOR_SAMPLES * MAX_SECTORS_PER_UPDATE)
+            return;
+    }
+
     for (int32_t sectorsRead = 0; sectorsRead < MAX_SECTORS_PER_UPDATE; ++sectorsRead) {
         int32_t freeSamples;
 
