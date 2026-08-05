@@ -49,10 +49,16 @@ static bool isCancelRequested() noexcept {
 }
 
 //------------------------------------------------------------------------------------------------------------------------------------------
-// Keeps the console alive while waiting on the link, and redraws so the 'connecting' display animates.
-// Returns false if the wait should be given up on.
+// Keeps the console alive while waiting on the link. Returns false if the wait should be given up on.
+//
+// 'bRedraw' is for the waits that happen while connecting. Nothing else is drawing then - the screen showing the other
+// console being found, and the ping beside it, come from here and nowhere else - so without it that screen sits frozen
+// and the consoles look like they are not pairing even when they are.
+//
+// It has to be off for the waits during play. Those happen part way through a frame, where the framebuffer still holds
+// whichever pass was last drawn into it, and repainting from there puts the touch screen's own image on the top screen.
 //------------------------------------------------------------------------------------------------------------------------------------------
-static bool pumpWhileWaiting(const bool bIsAbortable) noexcept {
+static bool pumpWhileWaiting(const bool bIsAbortable, const bool bRedraw) noexcept {
     if (Input::isQuitRequested())
         return false;
 
@@ -68,12 +74,13 @@ static bool pumpWhileWaiting(const bool bIsAbortable) noexcept {
         return false;
     }
 
-    // Note: deliberately not repainting. The screens already hold a finished frame, and redrawing them from the
-    // framebuffer mid frame is what put the status bar and the intermission on the top screen.
-    #if PSYDOOM_3DS
-        Platform3DS::idleWait();
-    #else
+    if (bRedraw) {
         Video::displayFramebuffer();
+    }
+    #if PSYDOOM_3DS
+        else {
+            Platform3DS::idleWait();    // Somewhere to idle for a frame that does not touch either screen
+        }
     #endif
 
     Utils::threadYield();
@@ -85,7 +92,7 @@ static bool pumpWhileWaiting(const bool bIsAbortable) noexcept {
 //------------------------------------------------------------------------------------------------------------------------------------------
 static bool waitForLink() noexcept {
     while (!NetworkUds3DS::isLinkUp()) {
-        if (!pumpWhileWaiting(true))
+        if (!pumpWhileWaiting(true, true))
             return false;
     }
 
@@ -133,7 +140,7 @@ bool initForClient() noexcept {
                 break;
         }
 
-        if (!pumpWhileWaiting(true))
+        if (!pumpWhileWaiting(true, true))
             return false;
     }
 
@@ -178,7 +185,7 @@ bool initFor3DSLocalWireless() noexcept {
             return true;
         }
 
-        if (!pumpWhileWaiting(true))
+        if (!pumpWhileWaiting(true, true))
             return false;
     }
 
@@ -212,7 +219,7 @@ bool sendBytes(const void* const pBuffer, const int32_t numBytes) noexcept {
         return false;
 
     while (!NetworkUds3DS::send(pBuffer, numBytes)) {
-        if (!pumpWhileWaiting(false))
+        if (!pumpWhileWaiting(false, true))
             return false;
 
         if (!isConnected())
@@ -240,7 +247,7 @@ bool recvBytes(void* pBuffer, const int32_t numBytes) noexcept {
             return false;
         }
 
-        if (!pumpWhileWaiting(false))
+        if (!pumpWhileWaiting(false, true))
             return false;
 
         if (!isConnected())
@@ -260,7 +267,7 @@ bool sendTickPacket(const NetPacket_Tick& packet) noexcept {
     const auto waitStartTime = std::chrono::steady_clock::now();
 
     while (!NetworkUds3DS::send(&packet, sizeof(packet))) {
-        if (!pumpWhileWaiting(true))
+        if (!pumpWhileWaiting(false, false))
             return false;
 
         if (!isConnected())
@@ -322,7 +329,7 @@ bool recvTickPacket(NetPacket_Tick& packet, std::chrono::system_clock::time_poin
 
         // Note: abortable, unlike before. Without this the only way out of a game whose other console had gone was to
         // turn this one off too.
-        if (!pumpWhileWaiting(true))
+        if (!pumpWhileWaiting(false, false))
             return false;
 
         if (!isConnected())
