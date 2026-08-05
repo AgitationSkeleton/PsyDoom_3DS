@@ -107,7 +107,8 @@ struct InMsg {
 //------------------------------------------------------------------------------------------------------------------------------------------
 static bool             gbUdsInited = false;
 static bool             gbIsHost = false;
-static bool             gbNetworkUp = false;        // Hosting or connected at the UDS level
+static bool             gbNetworkUp = false;        // The link is answering: cleared as soon as it stops
+static bool             gbNetworkOwned = false;     // A network was created or joined and still has to be taken down
 static udsBindContext   gBindCtx = {};
 static bool             gbBound = false;
 
@@ -202,6 +203,7 @@ static bool sendRaw(const MsgKind kind, const uint16_t seq, const void* const pP
     );
 
     if (UDS_CHECK_SENDTO_FATALERROR(result)) {
+        PSYDOOM_3DS_LOG("uds: send failed, link considered down (0x%08lX)", (unsigned long) result);
         gbNetworkUp = false;
         return false;
     }
@@ -266,6 +268,7 @@ static void pullArrivals() noexcept {
         const Result result = udsPullPacket(&gBindCtx, frame, sizeof(frame), &actualSize, &srcNodeId);
 
         if (R_FAILED(result)) {
+            PSYDOOM_3DS_LOG("uds: receive failed, link considered down (0x%08lX)", (unsigned long) result);
             gbNetworkUp = false;
             return;
         }
@@ -351,13 +354,19 @@ void shutdown() noexcept {
 }
 
 void disconnect() noexcept {
-    if (gbNetworkUp || gbBound) {
-        PSYDOOM_3DS_LOG("uds: disconnect (host=%d, networkUp=%d, bound=%d)", (int) gbIsHost, (int) gbNetworkUp, (int) gbBound);
+    if (gbNetworkOwned || gbBound) {
+        PSYDOOM_3DS_LOG(
+            "uds: disconnect (host=%d, owned=%d, up=%d, bound=%d)",
+            (int) gbIsHost, (int) gbNetworkOwned, (int) gbNetworkUp, (int) gbBound
+        );
     }
 
-    // The two roles unwind in opposite orders, and getting it the wrong way round leaks the data channel
+    // Note: keyed off 'gbNetworkOwned' rather than whether the link is still answering. A network that has gone quiet
+    // still exists as far as the service is concerned and still has to be destroyed, or the next one cannot be made.
+    //
+    // The two roles unwind in opposite orders, and getting it the wrong way round leaks the data channel.
     if (gbIsHost) {
-        if (gbNetworkUp) {
+        if (gbNetworkOwned) {
             const Result result = udsDestroyNetwork();
 
             if (R_FAILED(result)) {
@@ -381,7 +390,7 @@ void disconnect() noexcept {
             }
         }
 
-        if (gbNetworkUp) {
+        if (gbNetworkOwned) {
             const Result result = udsDisconnectNetwork();
 
             if (R_FAILED(result)) {
@@ -392,6 +401,7 @@ void disconnect() noexcept {
 
     gBindCtx = {};
     gbBound = false;
+    gbNetworkOwned = false;
     gbNetworkUp = false;
     gbIsHost = false;       // Whoever starts first hosts, so this has to be settled fresh every session
     gbSearching = false;
@@ -425,6 +435,7 @@ bool hostGame(const uint8_t gameType, const uint8_t skill, const int16_t startMa
 
     PSYDOOM_3DS_LOG("uds: hosting");
     gbBound = true;
+    gbNetworkOwned = true;
     gbNetworkUp = true;
     gbIsHost = true;
     resetLinkState();
@@ -532,6 +543,7 @@ bool joinGame(const int32_t networkIdx) noexcept {
 
     PSYDOOM_3DS_LOG("uds: joined a game");
     gbBound = true;
+    gbNetworkOwned = true;
     gbNetworkUp = true;
     gbIsHost = false;
     gbSearching = false;

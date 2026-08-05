@@ -15,6 +15,10 @@
 #include "PsyDoom/Controls.h"
 #include "PsyDoom/DemoPlayer.h"
 #include "PsyDoom/Game.h"
+
+#if PSYDOOM_3DS
+    #include "Platform_3DS.h"
+#endif
 #include "PsyDoom/Input.h"
 #include "PsyDoom/MapHash.h"
 #include "PsyDoom/Network.h"
@@ -802,9 +806,19 @@ void I_NetSetup() noexcept {
         outPkt.startMap = {};
     }
 
-    // Endian correct the output packet and send
+    // Endian correct the output packet and send.
+    //
+    // PsyDoom: these are checked now. Nothing looked at whether any of the handshake actually got through, so a link
+    // that failed part way left the incoming packet as it started - all zeroes - and a zero protocol version does not
+    // match, which was then reported to the player as the two consoles running different versions. They were not: the
+    // connection had simply gone, and saying so is both true and something a player can act on.
     outPkt.endianCorrect();
-    Network::sendBytes(&outPkt, sizeof(outPkt));
+
+    if (!Network::sendBytes(&outPkt, sizeof(outPkt))) {
+        gbDidAbortGame = true;
+        RunNetErrorMenu_FailedToConnect();
+        return;
+    }
 
     // If the player is the server then determine the game settings, endian correct and send to the client
     if (gCurPlayerIndex == 0) {
@@ -814,16 +828,37 @@ void I_NetSetup() noexcept {
         // Copy and endian correct the settings before sending to the client player
         GameSettings settings = Game::gSettings;
         settings.endianCorrect();
-        Network::sendBytes(&settings, sizeof(settings));
+
+        if (!Network::sendBytes(&settings, sizeof(settings))) {
+            gbDidAbortGame = true;
+            RunNetErrorMenu_FailedToConnect();
+            return;
+        }
     }
 
     // Read the input connect packet from the other player and endian correct
     NetPacket_Connect inPkt = {};
-    Network::recvBytes(&inPkt, sizeof(inPkt));
+
+    if (!Network::recvBytes(&inPkt, sizeof(inPkt))) {
+        gbDidAbortGame = true;
+        RunNetErrorMenu_FailedToConnect();
+        return;
+    }
+
     inPkt.endianCorrect();
 
     // Verify the network protocol version and game ids are OK - abort if not
     if ((inPkt.protocolVersion != NET_PROTOCOL_VERSION) || (inPkt.gameId != Game::gConstants.netGameId)) {
+        // Worth recording which of the two it was. A differing game id is the more likely one and does not mean the
+        // builds differ - it comes from the disc data each console has extracted.
+        #if PSYDOOM_3DS
+            PSYDOOM_3DS_LOG(
+                "net: mismatch - protocol here %u there %u, game id here %u there %u",
+                (unsigned) NET_PROTOCOL_VERSION, (unsigned) inPkt.protocolVersion,
+                (unsigned) Game::gConstants.netGameId, (unsigned) inPkt.gameId
+            );
+        #endif
+
         gbDidAbortGame = true;
         RunNetErrorMenu_GameTypeOrVersionMismatch();
         return;
