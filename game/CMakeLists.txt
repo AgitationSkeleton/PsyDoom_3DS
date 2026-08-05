@@ -569,8 +569,28 @@ target_compile_definitions(${GAME_TGT_NAME} PRIVATE
 
 # Various tweaks that can be applied
 if (PLATFORM_3DS)
+    # Which build this is, for the startup log.
+    #
+    # The compile date used to stand in for this, and it could not do the job: it is the date one source file last
+    # changed, so it stayed the same across weeks of different builds and differed between variants of the same one.
+    # Placing a log against a build was guesswork. Ask git instead.
+    execute_process(
+        COMMAND git describe --tags --always --dirty
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        OUTPUT_VARIABLE PSYDOOM_3DS_BUILD_ID
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+
+    if (NOT PSYDOOM_3DS_BUILD_ID)
+        set(PSYDOOM_3DS_BUILD_ID "unknown")
+    endif()
+
+    message(STATUS "PsyDoom 3DS build id: ${PSYDOOM_3DS_BUILD_ID}")
+
     target_compile_definitions(${GAME_TGT_NAME} PRIVATE
         PSYDOOM_3DS=1
+        PSYDOOM_3DS_BUILD_ID="${PSYDOOM_3DS_BUILD_ID}"
         PSYDOOM_3DS_APP_NAME="${PSYDOOM_3DS_APP_NAME}"
         PSYDOOM_3DS_VARIANT_DIR="${PSYDOOM_3DS_VARIANT_DIR}"
         PSYDOOM_3DS_DISC_CUE="${PSYDOOM_3DS_CUE_NAME}"

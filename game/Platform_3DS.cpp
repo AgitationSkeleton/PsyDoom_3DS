@@ -221,7 +221,7 @@ void logOpen() noexcept {
     }
 
     logf("PsyDoom 3DS startup log");
-    logf("Build: %s %s, variant '%s'", __DATE__, __TIME__, PSYDOOM_3DS_VARIANT_DIR);
+    logf("Build: %s (compiled %s %s), variant '%s'", PSYDOOM_3DS_BUILD_ID, __DATE__, __TIME__, PSYDOOM_3DS_VARIANT_DIR);
     logf("Environment: envIsHomebrew=%d, systemLanguage handled by libctru", (int) envIsHomebrew());
     logf("Startup %s", memoryStatusString());
     logf("Console: %s", (isNew3DS()) ? "New 3DS/2DS" : "Old 3DS/2DS");
