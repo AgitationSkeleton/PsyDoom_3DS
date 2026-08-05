@@ -16,6 +16,8 @@
 #include "PsyDoom/DemoPlayer.h"
 #include "PsyDoom/Game.h"
 
+#include <chrono>
+
 #if PSYDOOM_3DS
     #include "Platform_3DS.h"
 #endif
@@ -632,6 +634,32 @@ void I_IncDrawnFrameCount() noexcept {
 // Also does framerate limiting to 30 Hz and updates the elapsed vblank count, which feeds the game's timing system.
 //------------------------------------------------------------------------------------------------------------------------------------------
 void I_DrawPresent() noexcept {
+    // PsyDoom 3DS: notice a frame that took far longer than it should have, and say what memory looked like when it
+    // did. Stalls on the title screen have been reported as intermittent - happening on any detail setting, and often
+    // not at all - which is not something that can be reasoned about from the source. This is here to catch one in the
+    // act rather than to fix anything.
+    #if PSYDOOM_3DS
+    {
+        static uint64_t sLastPresentMs = 0;
+        constexpr uint64_t STALL_THRESHOLD_MS = 250;
+
+        const uint64_t nowMs = (uint64_t) std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now().time_since_epoch()
+        ).count();
+
+        if (sLastPresentMs != 0) {
+            const uint64_t frameMs = nowMs - sLastPresentMs;
+
+            if (frameMs >= STALL_THRESHOLD_MS) {
+                const int32_t zoneFree = (gpMainMemZone) ? Z_FreeMemory(*gpMainMemZone) : -1;
+                PSYDOOM_3DS_LOG("stall: %llu ms frame, zone free %d, %s", (unsigned long long) frameMs, (int) zoneFree, Platform3DS::memoryStatusString());
+            }
+        }
+
+        sLastPresentMs = nowMs;
+    }
+    #endif
+
     // Finish up all in-flight drawing commands
     LIBGPU_DrawSync(0);
 
