@@ -182,10 +182,19 @@ bool initFor3DSLocalWireless() noexcept {
     if (!NetworkUds3DS::init())
         return false;
 
-    // Look for a console already waiting. A handful of scans is enough; each one takes a moment on the radio.
-    constexpr int32_t NUM_JOIN_ATTEMPTS = 4;
+    // Take turns looking and advertising, rather than looking a few times and then advertising for good.
+    //
+    // Both players usually reach this at the same moment - they agree to play, or they both back out of one game to
+    // start another - so both scan while neither is advertising yet, both find nothing, and both settle down to host.
+    // Two hosts never find each other and neither ever looks again, which is a game that simply will not start.
+    //
+    // Alternating breaks that. Whoever is advertising when the other happens to scan gets found, and since a scan
+    // takes a varying amount of time on the radio the two consoles drift apart rather than staying in step.
+    constexpr int32_t NUM_ROUNDS = 8;
+    constexpr int64_t HOST_WAIT_MS = 3000;      // Long enough for the other console to complete a scan and join
 
-    for (int32_t attempt = 0; attempt < NUM_JOIN_ATTEMPTS; ++attempt) {
+    for (int32_t round = 0; round < NUM_ROUNDS; ++round) {
+        // Is anyone advertising right now?
         NetworkUds3DS::FoundGame games[NetworkUds3DS::MAX_FOUND_GAMES] = {};
         const int32_t numGames = NetworkUds3DS::scanForGames(games, NetworkUds3DS::MAX_FOUND_GAMES);
 
@@ -208,9 +217,24 @@ bool initFor3DSLocalWireless() noexcept {
 
         if (!pumpWhileWaiting(true, true))
             return false;
+
+        // Nobody about, so advertise for a while and see if anyone turns up
+        if (NetworkUds3DS::hostGame((uint8_t) gStartGameType, (uint8_t) gStartSkill, (int16_t) gStartMapOrEpisode)) {
+            ProgArgs::gbIsNetServer = true;
+            ProgArgs::gbIsNetClient = false;
+
+            if (waitForLink(HOST_WAIT_MS))
+                return true;
+
+            NetworkUds3DS::disconnect();
+
+            if (gbWasInitAborted)
+                return false;
+        }
     }
 
-    // Nobody is waiting, so host and let the other console find us
+    // Taking turns has not found anyone, so settle down and advertise until the other console appears or the player
+    // gives up. Whoever is slower to start ends up here, and is found by the one still looking.
     ProgArgs::gbIsNetServer = true;
     ProgArgs::gbIsNetClient = false;
     return initForServer();

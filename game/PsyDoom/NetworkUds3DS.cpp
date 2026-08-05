@@ -127,6 +127,7 @@ static int64_t  gLastPingSentMs = 0;
 static int32_t  gPingMs = -1;
 static uint32_t gRetransmits = 0;
 static bool     gbSearching = false;
+static bool     gbPeerEverSeen = false;   // Something has actually arrived from the other console
 
 // Beacon scan results are kept between scanning and joining
 static std::array<uint8_t, 0x4000>  gScanBuffer = {};
@@ -165,6 +166,7 @@ static void resetLinkState() noexcept {
     gbHavePeerAck = false;
     gPingMs = -1;
     gRetransmits = 0;
+    gbPeerEverSeen = false;
 
     const int64_t now = nowMs();
     gConnectTimeMs = now;
@@ -280,6 +282,7 @@ static void pullArrivals() noexcept {
         std::memcpy(&header, frame, sizeof(MsgHeader));
 
         gLastRecvTimeMs = nowMs();
+        gbPeerEverSeen = true;
 
         // Take the peer's acknowledgement from any frame that carries one
         if ((!gbHavePeerAck) || seqLessThan(gPeerAckSeq, header.ackSeq)) {
@@ -597,9 +600,14 @@ void update() noexcept {
         sendRaw(MsgKind::Ack, 0, nullptr, 0, 0);
     }
 
-    // Give up if the other side has gone silent for too long. Note this counts silence on the link, not in the game's
-    // own traffic: a console busy loading a level keeps answering, so this only fires when one has really gone.
-    if (now - gLastRecvTimeMs >= LINK_TIMEOUT_MS) {
+    // Give up if the other side has gone silent for too long. Two things this deliberately does not count.
+    //
+    // Silence in the game's own traffic is not silence on the link: a console busy loading a level keeps answering.
+    //
+    // And a console that has never been heard from at all has not gone quiet - it was never there. A host sits
+    // advertising with nobody to hear from until someone joins, and counting that as silence killed the link five
+    // seconds in, after which nothing could join at all because 'update' stops the moment the link is marked down.
+    if (gbPeerEverSeen && (now - gLastRecvTimeMs >= LINK_TIMEOUT_MS)) {
         if (gbNetworkUp) {
             PSYDOOM_3DS_LOG("uds: nothing heard for %lldms, link considered down", (long long)(now - gLastRecvTimeMs));
         }
