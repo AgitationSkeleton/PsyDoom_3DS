@@ -220,7 +220,19 @@ void psxcd_update_audio_buffer() noexcept {
 
     // Fill whatever room there is, a sector at a time. Reading happens outside the ring's lock so the audio thread is
     // never held up by it; only the copy in afterwards takes the lock.
-    for (;;) {
+    //
+    // Only so many sectors per visit though. Filling all the room there is meant the first visit after music started
+    // read the whole buffer - a hundred kilobytes off the card in one go, with everything else waiting on it. That is
+    // felt worst in a network game, where the two consoles run in lockstep and a stall on one holds up both, which is
+    // what made Club Doom crawl the moment its music began.
+    //
+    // Eight sectors is about 18 KB a visit, and still supplies more than playback consumes even if this is only
+    // reached ten times a second - so the read ahead keeps filling, it just gets there over several visits instead of
+    // stopping the world once. Worth the margin: a console struggling enough to update this rarely is exactly the one
+    // that must not also lose its music.
+    constexpr int32_t MAX_SECTORS_PER_UPDATE = 8;
+
+    for (int32_t sectorsRead = 0; sectorsRead < MAX_SECTORS_PER_UPDATE; ++sectorsRead) {
         int32_t freeSamples;
 
         {
