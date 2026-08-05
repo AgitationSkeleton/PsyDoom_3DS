@@ -3,6 +3,8 @@
 //------------------------------------------------------------------------------------------------------------------------------------------
 #include "NetworkUds3DS.h"
 
+#include "Platform_3DS.h"
+
 #if PSYDOOM_3DS
 
 #include <3ds.h>
@@ -318,37 +320,80 @@ bool init() noexcept {
         return true;
 
     // The username shown to the other console. UDS needs a non empty one.
-    if (R_FAILED(udsInit(0x3000, "PsyDoom")))
-        return false;
+    constexpr int32_t NUM_INIT_ATTEMPTS = 4;
+    Result result = 0;
 
-    gbUdsInited = true;
-    return true;
+    for (int32_t attempt = 0; attempt < NUM_INIT_ATTEMPTS; ++attempt) {
+        result = udsInit(0x3000, "PsyDoom");
+
+        if (R_SUCCEEDED(result)) {
+            gbUdsInited = true;
+            return true;
+        }
+
+        // Not up yet: almost always a previous session still letting go. Wait a frame and ask again.
+        PSYDOOM_3DS_LOG("uds: udsInit attempt %d failed (0x%08lX)", (int)(attempt + 1), (unsigned long) result);
+        Platform3DS::idleWait();
+    }
+
+    PSYDOOM_3DS_LOG("uds: giving up on udsInit (0x%08lX)", (unsigned long) result);
+    return false;
 }
 
 void shutdown() noexcept {
     disconnect();
 
     if (gbUdsInited) {
+        PSYDOOM_3DS_LOG("uds: shutdown");
         udsExit();
         gbUdsInited = false;
     }
 }
 
 void disconnect() noexcept {
-    if (gbNetworkUp) {
-        if (gbIsHost) {
-            udsDestroyNetwork();
-        } else {
-            udsDisconnectNetwork();
+    if (gbNetworkUp || gbBound) {
+        PSYDOOM_3DS_LOG("uds: disconnect (host=%d, networkUp=%d, bound=%d)", (int) gbIsHost, (int) gbNetworkUp, (int) gbBound);
+    }
+
+    // The two roles unwind in opposite orders, and getting it the wrong way round leaks the data channel
+    if (gbIsHost) {
+        if (gbNetworkUp) {
+            const Result result = udsDestroyNetwork();
+
+            if (R_FAILED(result)) {
+                PSYDOOM_3DS_LOG("uds: udsDestroyNetwork failed (0x%08lX)", (unsigned long) result);
+            }
+        }
+
+        if (gbBound) {
+            const Result result = udsUnbind(&gBindCtx);
+
+            if (R_FAILED(result)) {
+                PSYDOOM_3DS_LOG("uds: udsUnbind failed (0x%08lX)", (unsigned long) result);
+            }
+        }
+    } else {
+        if (gbBound) {
+            const Result result = udsUnbind(&gBindCtx);
+
+            if (R_FAILED(result)) {
+                PSYDOOM_3DS_LOG("uds: udsUnbind failed (0x%08lX)", (unsigned long) result);
+            }
+        }
+
+        if (gbNetworkUp) {
+            const Result result = udsDisconnectNetwork();
+
+            if (R_FAILED(result)) {
+                PSYDOOM_3DS_LOG("uds: udsDisconnectNetwork failed (0x%08lX)", (unsigned long) result);
+            }
         }
     }
 
-    if (gbBound) {
-        udsUnbind(&gBindCtx);
-        gbBound = false;
-    }
-
+    gBindCtx = {};
+    gbBound = false;
     gbNetworkUp = false;
+    gbIsHost = false;       // Whoever starts first hosts, so this has to be settled fresh every session
     gbSearching = false;
     gpScannedNetworks = nullptr;
     gNumScannedNetworks = 0;
@@ -373,9 +418,12 @@ bool hostGame(const uint8_t gameType, const uint8_t skill, const int16_t startMa
         UDS_DEFAULT_RECVBUFSIZE
     );
 
-    if (R_FAILED(result))
+    if (R_FAILED(result)) {
+        PSYDOOM_3DS_LOG("uds: udsCreateNetwork failed (0x%08lX)", (unsigned long) result);
         return false;
+    }
 
+    PSYDOOM_3DS_LOG("uds: hosting");
     gbBound = true;
     gbNetworkUp = true;
     gbIsHost = true;
@@ -477,9 +525,12 @@ bool joinGame(const int32_t networkIdx) noexcept {
         UDS_DEFAULT_RECVBUFSIZE
     );
 
-    if (R_FAILED(result))
+    if (R_FAILED(result)) {
+        PSYDOOM_3DS_LOG("uds: udsConnectNetwork failed (0x%08lX)", (unsigned long) result);
         return false;
+    }
 
+    PSYDOOM_3DS_LOG("uds: joined a game");
     gbBound = true;
     gbNetworkUp = true;
     gbIsHost = false;
