@@ -90,15 +90,31 @@ static bool pumpWhileWaiting(const bool bIsAbortable, const bool bRedraw) noexce
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Waits until both consoles are present on the wireless network
 //------------------------------------------------------------------------------------------------------------------------------------------
-static bool waitForLink() noexcept {
+static bool waitForLink(const int64_t timeoutMs) noexcept {
+    const auto startTime = std::chrono::steady_clock::now();
+
     while (!NetworkUds3DS::isLinkUp()) {
         if (!pumpWhileWaiting(true, true))
             return false;
+
+        if (timeoutMs > 0) {
+            const auto waited = std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - startTime
+            ).count();
+
+            if (waited > timeoutMs) {
+                PSYDOOM_3DS_LOG("uds: no link after %lldms, giving up on this one", (long long) waited);
+                return false;
+            }
+        }
     }
 
     gbConnected = true;
     return true;
 }
+
+// How long to give a game we have joined to actually produce a link before deciding its beacon was stale
+static constexpr int64_t JOIN_LINK_TIMEOUT_MS = 5000;
 
 //------------------------------------------------------------------------------------------------------------------------------------------
 // Hosts a game and waits for the other console to join
@@ -111,7 +127,7 @@ bool initForServer() noexcept {
     if (!NetworkUds3DS::hostGame((uint8_t) gStartGameType, (uint8_t) gStartSkill, (int16_t) gStartMapOrEpisode))
         return false;
 
-    if (!waitForLink()) {
+    if (!waitForLink(0)) {
         NetworkUds3DS::disconnect();
         return false;
     }
@@ -144,7 +160,7 @@ bool initForClient() noexcept {
             return false;
     }
 
-    if (!waitForLink()) {
+    if (!waitForLink(JOIN_LINK_TIMEOUT_MS)) {
         NetworkUds3DS::disconnect();
         return false;
     }
@@ -177,12 +193,17 @@ bool initFor3DSLocalWireless() noexcept {
             ProgArgs::gbIsNetServer = false;
             ProgArgs::gbIsNetClient = true;
 
-            if (!waitForLink()) {
-                NetworkUds3DS::disconnect();
-                return false;
-            }
+            if (waitForLink(JOIN_LINK_TIMEOUT_MS))
+                return true;
 
-            return true;
+            // Nothing came of it. Let go and keep looking: the console that was advertising has most likely just shut
+            // its game down, and its beacon has outlived it. Backing out is the player's decision, not a stale beacon's.
+            NetworkUds3DS::disconnect();
+
+            if (gbWasInitAborted)
+                return false;
+
+            continue;
         }
 
         if (!pumpWhileWaiting(true, true))
