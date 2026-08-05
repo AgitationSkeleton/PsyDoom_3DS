@@ -280,24 +280,15 @@ bool sendTickPacket(const NetPacket_Tick& packet) noexcept {
     if (!isConnected())
         return false;
 
-    // Note: waits for room rather than giving up. See the comment above 'sendBytes'.
-    //
-    // Bounded, for the same reason the receive is: room only frees up when the other console acknowledges, so a
-    // console that has gone away would otherwise leave this spinning for good.
-    constexpr auto SEND_WINDOW_TIMEOUT = std::chrono::seconds(20);
-    const auto waitStartTime = std::chrono::steady_clock::now();
-
+    // Note: waits for room rather than giving up, and with no time limit of its own. Room frees up when the other
+    // console acknowledges, and one that has stopped acknowledging altogether is caught by the link layer - which
+    // 'isConnected' reports. See the note in 'recvTickPacket'.
     while (!NetworkUds3DS::send(&packet, sizeof(packet))) {
         if (!pumpWhileWaiting(false, false))
             return false;
 
         if (!isConnected())
             return false;
-
-        if (std::chrono::steady_clock::now() - waitStartTime > SEND_WINDOW_TIMEOUT) {
-            shutdown();
-            return false;
-        }
     }
 
     return true;
@@ -318,13 +309,10 @@ bool recvTickPacket(NetPacket_Tick& packet, std::chrono::system_clock::time_poin
     if (!isConnected())
         return false;
 
-    // How long to keep waiting on a console that has said nothing at all.
-    //
-    // Generous on purpose: the other side goes quiet for a while when it loads a level, and cutting a game short over
-    // an ordinary pause would be far worse than taking a few seconds to notice a console that has genuinely gone.
-    constexpr auto PEER_SILENCE_TIMEOUT = std::chrono::seconds(20);
-    const auto waitStartTime = std::chrono::steady_clock::now();
-
+    // Note: no time limit here on purpose. A console that has gone is the link layer's business, and it keeps a
+    // keepalive going and gives up after five seconds of real silence - see 'LINK_TIMEOUT_MS'. The 'isConnected' check
+    // below is what ends this wait when that happens. Timing the game's own ticks instead would end a healthy game
+    // every time the other console took a while over a level.
     while (!gbHavePendingTickPacket) {
         int64_t recvTimeMs = 0;
         const int32_t received = NetworkUds3DS::receive(&gPendingTickPacket, sizeof(gPendingTickPacket), &recvTimeMs);
@@ -355,11 +343,6 @@ bool recvTickPacket(NetPacket_Tick& packet, std::chrono::system_clock::time_poin
 
         if (!isConnected())
             return false;
-
-        if (std::chrono::steady_clock::now() - waitStartTime > PEER_SILENCE_TIMEOUT) {
-            shutdown();     // Nothing has arrived for long enough that the other console is not coming back
-            return false;
-        }
     }
 
     packet = gPendingTickPacket;

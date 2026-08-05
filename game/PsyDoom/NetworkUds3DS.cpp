@@ -597,8 +597,13 @@ void update() noexcept {
         sendRaw(MsgKind::Ack, 0, nullptr, 0, 0);
     }
 
-    // Give up if the other side has gone silent for too long
+    // Give up if the other side has gone silent for too long. Note this counts silence on the link, not in the game's
+    // own traffic: a console busy loading a level keeps answering, so this only fires when one has really gone.
     if (now - gLastRecvTimeMs >= LINK_TIMEOUT_MS) {
+        if (gbNetworkUp) {
+            PSYDOOM_3DS_LOG("uds: nothing heard for %lldms, link considered down", (long long)(now - gLastRecvTimeMs));
+        }
+
         gbNetworkUp = false;
     }
 }
